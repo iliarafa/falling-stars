@@ -1,0 +1,650 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, user-scalable=no, maximum-scale=1.0">
+  <title>Star Catcher</title>
+  <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      background: #000;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      height: 100vh;
+      font-family: "Press Start 2P", monospace;
+      overflow: hidden;
+      -webkit-font-smoothing: none;
+      -moz-osx-font-smoothing: unset;
+      text-rendering: optimizeSpeed;
+    }
+    #gameContainer {
+      position: relative;
+    }
+    body::after {
+      content: '';
+      position: fixed;
+      top: 0; left: 0; right: 0; bottom: 0;
+      background: repeating-linear-gradient(
+        0deg,
+        rgba(0, 0, 0, 0.12) 0px,
+        rgba(0, 0, 0, 0.12) 1px,
+        transparent 1px,
+        transparent 3px
+      );
+      pointer-events: none;
+      z-index: 5;
+    }
+    canvas#game {
+      display: block;
+      width: 100vw;
+      height: 100vh;
+      object-fit: contain;
+      image-rendering: pixelated;
+      image-rendering: crisp-edges;
+      -ms-interpolation-mode: nearest-neighbor;
+    }
+    #overlay {
+      position: fixed;
+      top: 0; left: 0; right: 0; bottom: 0;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      background: #000;
+      color: #fff;
+      text-align: center;
+      z-index: 10;
+    }
+    #starfield {
+      position: absolute;
+      top: 0; left: 0;
+      width: 100%; height: 100%;
+      z-index: 0;
+    }
+    #overlay.hidden { display: none; }
+    #overlay h1 {
+      font-size: 24px;
+      margin-bottom: 8px;
+      color: #fff;
+      text-shadow: none;
+    }
+    #overlay p {
+      font-size: 10px;
+      color: #aaa;
+      margin-bottom: 24px;
+    }
+    #overlay .score-display {
+      font-size: 14px;
+      color: #fff;
+      margin-bottom: 20px;
+    }
+    #startBtn {
+      padding: 14px 48px;
+      font-size: 12px;
+      border: 2px solid #fff;
+      border-radius: 0;
+      background: #000;
+      color: #fff;
+      font-family: "Press Start 2P", monospace;
+      font-weight: bold;
+      cursor: pointer;
+      transition: background 0.15s, color 0.15s;
+      text-transform: uppercase;
+      letter-spacing: 2px;
+    }
+    #startBtn:hover {
+      background: #fff;
+      color: #000;
+    }
+    .controls-hint {
+      font-size: 8px;
+      color: #666;
+      margin-top: 16px;
+    }
+    .overlay-step { display: none; flex-direction: column; align-items: center; position: relative; z-index: 1; }
+    .overlay-step.active { display: flex; }
+    .retro-btn {
+      padding: 14px 48px;
+      font-size: 12px;
+      border: 2px solid #fff;
+      border-radius: 0;
+      background: #000;
+      color: #fff;
+      font-family: "Press Start 2P", monospace;
+      font-weight: bold;
+      cursor: pointer;
+      transition: background 0.15s, color 0.15s;
+      text-transform: uppercase;
+      letter-spacing: 2px;
+      margin-top: 12px;
+    }
+    .retro-btn:hover {
+      background: #fff;
+      color: #000;
+    }
+    .skip-btn {
+      padding: 8px 24px;
+      font-size: 9px;
+      border: none;
+      border-radius: 0;
+      background: transparent;
+      color: #666;
+      font-family: "Press Start 2P", monospace;
+      cursor: pointer;
+      text-transform: uppercase;
+      letter-spacing: 2px;
+      margin-top: 12px;
+    }
+    .skip-btn:hover { color: #999; }
+    #wishInput {
+      background: #000;
+      border: 2px solid #fff;
+      border-radius: 0;
+      color: #fff;
+      font-family: "Press Start 2P", monospace;
+      font-size: 10px;
+      padding: 10px 14px;
+      width: 80%;
+      max-width: 300px;
+      margin-top: 16px;
+      outline: none;
+      text-align: center;
+    }
+    #wishInput::placeholder { color: #555; }
+    #leaderboardList {
+      width: 85%;
+      max-width: 320px;
+      max-height: 200px;
+      overflow-y: auto;
+      margin-top: 16px;
+      border-top: 1px solid #444;
+    }
+    #leaderboardList::-webkit-scrollbar { width: 4px; }
+    #leaderboardList::-webkit-scrollbar-thumb { background: #444; }
+    .lb-entry {
+      padding: 8px 4px;
+      border-bottom: 1px dashed #333;
+      font-family: "Press Start 2P", monospace;
+      font-size: 8px;
+      color: #ccc;
+      text-align: left;
+      display: flex;
+      justify-content: space-between;
+      gap: 8px;
+    }
+    .lb-wish { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .lb-stars { color: #666; white-space: nowrap; }
+  </style>
+</head>
+<body>
+  <div id="gameContainer">
+    <canvas id="game"></canvas>
+    <div id="overlay">
+      <canvas id="starfield"></canvas>
+      <div id="stepStart" class="overlay-step active">
+        <h1>FALLING STARS</h1>
+        <p>CATCH THE FALLING STARS</p>
+        <button id="startBtn" class="retro-btn">PLAY</button>
+        <p class="controls-hint">ARROW KEYS OR TOUCH TO MOVE</p>
+      </div>
+      <div id="stepStats" class="overlay-step">
+        <h1>GAME OVER</h1>
+        <div class="score-display" id="statsCaught"></div>
+        <div class="score-display" id="statsScore"></div>
+        <button id="wishBtn" class="retro-btn">MAKE YOUR WISH</button>
+        <button id="skipBtn" class="skip-btn">SKIP</button>
+      </div>
+      <div id="stepWish" class="overlay-step">
+        <h1>MAKE YOUR WISH</h1>
+        <input type="text" id="wishInput" placeholder="TYPE YOUR WISH..." maxlength="100" autocomplete="off">
+        <button id="submitWishBtn" class="retro-btn">SUBMIT WISH</button>
+      </div>
+      <div id="stepLeaderboard" class="overlay-step">
+        <h1>WISH LEADERBOARD</h1>
+        <div id="leaderboardList"></div>
+        <button id="playAgainBtn" class="retro-btn">PLAY AGAIN</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const canvas = document.getElementById('game');
+    const ctx = canvas.getContext('2d');
+    const overlay = document.getElementById('overlay');
+    const startBtn = document.getElementById('startBtn');
+
+    // Overlay steps
+    const stepStart = document.getElementById('stepStart');
+    const stepStats = document.getElementById('stepStats');
+    const stepWish = document.getElementById('stepWish');
+    const stepLeaderboard = document.getElementById('stepLeaderboard');
+    const statsCaught = document.getElementById('statsCaught');
+    const statsScore = document.getElementById('statsScore');
+    const wishInput = document.getElementById('wishInput');
+    const leaderboardList = document.getElementById('leaderboardList');
+
+    // Pixel scale: render at low-res, scale up with nearest-neighbor
+    const SCALE = 4;
+    const W = Math.floor(Math.min(480, window.innerWidth) / SCALE);
+    const H = Math.floor(Math.min(700, window.innerHeight) / SCALE);
+    canvas.width = W * SCALE;
+    canvas.height = H * SCALE;
+
+    // Low-res offscreen canvas
+    const offCanvas = document.createElement('canvas');
+    offCanvas.width = W;
+    offCanvas.height = H;
+    const off = offCanvas.getContext('2d');
+
+    // Monochrome CRT color
+    const COL = '#fff';
+    const COL_DIM = '#888';
+
+    // Game state
+    let game = null;
+    let animFrame = null;
+
+    // Input
+    const keys = {};
+    let touchX = null;
+
+    window.addEventListener('keydown', e => { keys[e.key] = true; });
+    window.addEventListener('keyup', e => { keys[e.key] = false; });
+
+    canvas.addEventListener('touchstart', e => {
+      e.preventDefault();
+      const rect = canvas.getBoundingClientRect();
+      touchX = (e.touches[0].clientX - rect.left) / rect.width * W;
+    });
+    canvas.addEventListener('touchmove', e => {
+      e.preventDefault();
+      const rect = canvas.getBoundingClientRect();
+      touchX = (e.touches[0].clientX - rect.left) / rect.width * W;
+    });
+    canvas.addEventListener('touchend', () => { touchX = null; });
+
+    // Pixel art sprites
+
+    // Player: proportional human figure (11 x 12)
+    const PLAYER_SPRITE = [
+      [0,0,0,0,1,1,1,0,0,0,0],
+      [0,0,0,0,1,1,1,0,0,0,0],
+      [0,0,0,0,0,1,0,0,0,0,0],
+      [0,1,1,1,1,1,1,1,1,1,0],
+      [0,0,0,0,1,1,1,0,0,0,0],
+      [0,0,0,0,1,1,1,0,0,0,0],
+      [0,0,0,0,1,1,1,0,0,0,0],
+      [0,0,0,0,1,1,1,0,0,0,0],
+      [0,0,0,0,1,0,1,0,0,0,0],
+      [0,0,0,0,1,0,1,0,0,0,0],
+      [0,0,0,0,1,0,1,0,0,0,0],
+      [0,0,0,1,1,0,1,1,0,0,0],
+    ];
+
+    // Star: two animation frames (5 x 5)
+    const STAR_SPRITES = [
+      [
+        [0,0,1,0,0],
+        [0,1,1,1,0],
+        [1,1,1,1,1],
+        [0,1,1,1,0],
+        [0,0,1,0,0],
+      ],
+      [
+        [0,0,1,0,0],
+        [1,0,1,0,1],
+        [0,1,1,1,0],
+        [1,0,1,0,1],
+        [0,0,1,0,0],
+      ],
+    ];
+
+    // Life indicator (3 x 3)
+    const LIFE_SPRITE = [
+      [0,1,0],
+      [1,1,1],
+      [0,1,0],
+    ];
+
+    function drawSprite(sprite, x, y, color) {
+      off.fillStyle = color;
+      const sx = Math.floor(x);
+      const sy = Math.floor(y);
+      for (let r = 0; r < sprite.length; r++) {
+        for (let c = 0; c < sprite[r].length; c++) {
+          if (sprite[r][c]) {
+            off.fillRect(sx + c, sy + r, 1, 1);
+          }
+        }
+      }
+    }
+
+    // Background dots (single pixels)
+    const bgDots = Array.from({ length: 30 }, () => ({
+      x: Math.floor(Math.random() * W),
+      y: Math.floor(Math.random() * H),
+      twinkle: Math.random() * Math.PI * 2,
+      speed: Math.random() * 2 + 1,
+    }));
+
+    // Particle system (single pixels)
+    class Particle {
+      constructor(x, y) {
+        this.x = x;
+        this.y = y;
+        const angle = Math.random() * Math.PI * 2;
+        const speed = Math.random() * 0.8 + 0.3;
+        this.vx = Math.cos(angle) * speed;
+        this.vy = Math.sin(angle) * speed - 0.5;
+        this.life = 1;
+        this.decay = Math.random() * 0.04 + 0.03;
+      }
+      update() {
+        this.x += this.vx;
+        this.y += this.vy;
+        this.vy += 0.02;
+        this.life -= this.decay;
+      }
+      draw() {
+        off.globalAlpha = this.life;
+        off.fillStyle = COL;
+        off.fillRect(Math.floor(this.x), Math.floor(this.y), 1, 1);
+        off.globalAlpha = 1;
+      }
+    }
+
+    function initGame() {
+      return {
+        player: { x: Math.floor(W / 2) - 5, y: H - 17, w: 11, h: 12, speed: 1.5, dir: 0 },
+        stars: [],
+        particles: [],
+        score: 0,
+        caught: 0,
+        missed: 0,
+        maxMissed: 5,
+        spawnTimer: 0,
+        spawnInterval: 60,
+        difficulty: 1,
+        time: 0,
+        gameOver: false,
+        combo: 0,
+        comboText: null,
+      };
+    }
+
+    function spawnStar() {
+      game.stars.push({
+        x: Math.floor(Math.random() * (W - 8)) + 2,
+        y: -6,
+        speed: (Math.random() * 0.4 + 0.3) * game.difficulty,
+      });
+    }
+
+    function update() {
+      if (game.gameOver) return;
+      game.time++;
+
+      game.difficulty = 1 + game.time * 0.0003;
+      game.spawnInterval = Math.max(20, 60 - game.time * 0.01);
+
+      game.spawnTimer++;
+      if (game.spawnTimer >= game.spawnInterval) {
+        game.spawnTimer = 0;
+        spawnStar();
+      }
+
+      // Player movement
+      const p = game.player;
+      let moving = false;
+
+      if (touchX !== null) {
+        const target = touchX - p.w / 2;
+        const diff = target - p.x;
+        p.x += Math.sign(diff) * Math.min(Math.abs(diff), p.speed + 0.5);
+        p.dir = Math.sign(diff) || p.dir;
+        moving = true;
+      } else {
+        if (keys['ArrowLeft'] || keys['a']) { p.x -= p.speed; p.dir = -1; moving = true; }
+        if (keys['ArrowRight'] || keys['d']) { p.x += p.speed; p.dir = 1; moving = true; }
+      }
+      if (!moving) p.dir = 0;
+      p.x = Math.max(0, Math.min(W - p.w, p.x));
+
+      // Update stars
+      for (let i = game.stars.length - 1; i >= 0; i--) {
+        const s = game.stars[i];
+        s.y += s.speed;
+
+        // Catch detection (center-to-center)
+        const px = p.x + 5;
+        const py = p.y + 4;
+        const sx = s.x + 2;
+        const sy = s.y + 2;
+        if (Math.abs(sx - px) < 8 && Math.abs(sy - py) < 6) {
+          game.caught++;
+          game.combo++;
+          const bonus = game.combo >= 5 ? 3 : game.combo >= 3 ? 2 : 1;
+          game.score += 10 * bonus;
+
+          if (game.combo >= 3) {
+            game.comboText = { text: `${game.combo}X COMBO`, y: p.y - 6, life: 1 };
+          }
+
+          for (let j = 0; j < 8; j++) {
+            game.particles.push(new Particle(sx, sy));
+          }
+
+          game.stars.splice(i, 1);
+          continue;
+        }
+
+        if (s.y > H + 6) {
+          game.stars.splice(i, 1);
+          game.missed++;
+          game.combo = 0;
+          if (game.missed >= game.maxMissed) {
+            game.gameOver = true;
+          }
+        }
+      }
+
+      // Update particles
+      for (let i = game.particles.length - 1; i >= 0; i--) {
+        game.particles[i].update();
+        if (game.particles[i].life <= 0) game.particles.splice(i, 1);
+      }
+
+      // Update combo text
+      if (game.comboText) {
+        game.comboText.y -= 0.15;
+        game.comboText.life -= 0.015;
+        if (game.comboText.life <= 0) game.comboText = null;
+      }
+    }
+
+    function draw() {
+      // Clear low-res canvas
+      off.fillStyle = '#000';
+      off.fillRect(0, 0, W, H);
+
+      // Background twinkling dots
+      const t = Date.now() / 1000;
+      for (const d of bgDots) {
+        const alpha = 0.15 + 0.25 * Math.sin(t * d.speed + d.twinkle);
+        off.globalAlpha = alpha;
+        off.fillStyle = COL;
+        off.fillRect(d.x, d.y, 1, 1);
+      }
+      off.globalAlpha = 1;
+
+      if (!game) {
+        ctx.imageSmoothingEnabled = false;
+        ctx.drawImage(offCanvas, 0, 0, W * SCALE, H * SCALE);
+        return;
+      }
+
+      // Falling stars (animated between two frames)
+      const frame = Math.floor(game.time / 20) % 2;
+      for (const s of game.stars) {
+        drawSprite(STAR_SPRITES[frame], s.x, s.y, COL);
+      }
+
+      // Player
+      drawSprite(PLAYER_SPRITE, game.player.x, game.player.y, COL);
+
+      // Particles
+      for (const pt of game.particles) {
+        pt.draw();
+      }
+
+      // Combo text
+      if (game.comboText) {
+        off.globalAlpha = game.comboText.life;
+        off.fillStyle = COL;
+        off.font = '6px monospace';
+        off.textAlign = 'center';
+        off.fillText(game.comboText.text, Math.floor(W / 2), Math.floor(game.comboText.y));
+        off.globalAlpha = 1;
+      }
+
+      // HUD - Score (top left)
+      off.fillStyle = COL;
+      off.font = '6px monospace';
+      off.textAlign = 'left';
+      off.fillText(`SCORE ${game.score}`, 2, 7);
+
+      // HUD - Lives (top right, as small star sprites)
+      const remaining = game.maxMissed - game.missed;
+      for (let i = 0; i < game.maxMissed; i++) {
+        off.globalAlpha = i < remaining ? 1 : 0.2;
+        drawSprite(LIFE_SPRITE, W - 5 - i * 5, 3, COL);
+      }
+      off.globalAlpha = 1;
+
+      // Scale up to display canvas (nearest-neighbor)
+      ctx.imageSmoothingEnabled = false;
+      ctx.drawImage(offCanvas, 0, 0, W * SCALE, H * SCALE);
+    }
+
+    function loop() {
+      update();
+      draw();
+
+      if (game && game.gameOver) {
+        showStep('stepStats');
+        statsCaught.textContent = `STARS CAUGHT: ${game.caught}`;
+        statsScore.textContent = `SCORE: ${game.score}`;
+        overlay.classList.remove('hidden');
+        return;
+      }
+
+      animFrame = requestAnimationFrame(loop);
+    }
+
+    // Overlay step helper
+    function showStep(id) {
+      [stepStart, stepStats, stepWish, stepLeaderboard].forEach(s => s.classList.remove('active'));
+      document.getElementById(id).classList.add('active');
+    }
+
+    // Wish localStorage helpers
+    const WISH_KEY = 'starCatcherWishes';
+    function loadWishes() {
+      try { return JSON.parse(localStorage.getItem(WISH_KEY)) || []; }
+      catch { return []; }
+    }
+    function saveWish(wish, caught) {
+      const wishes = loadWishes();
+      wishes.unshift({ wish, caught, date: Date.now() });
+      if (wishes.length > 50) wishes.length = 50;
+      localStorage.setItem(WISH_KEY, JSON.stringify(wishes));
+    }
+    function renderLeaderboard() {
+      const wishes = loadWishes();
+      leaderboardList.innerHTML = '';
+      if (wishes.length === 0) {
+        leaderboardList.innerHTML = '<div class="lb-entry" style="justify-content:center;color:#555;">NO WISHES YET</div>';
+        return;
+      }
+      wishes.forEach(w => {
+        const el = document.createElement('div');
+        el.className = 'lb-entry';
+        el.innerHTML = `<span class="lb-wish">${w.wish.replace(/</g,'&lt;')}</span><span class="lb-stars">${w.caught} ★</span>`;
+        leaderboardList.appendChild(el);
+      });
+    }
+
+    // Start game
+    function startGame() {
+      overlay.classList.add('hidden');
+      game = initGame();
+      if (animFrame) cancelAnimationFrame(animFrame);
+      loop();
+    }
+
+    // Button handlers
+    startBtn.addEventListener('click', startGame);
+
+    document.getElementById('wishBtn').addEventListener('click', () => {
+      showStep('stepWish');
+      wishInput.value = '';
+      wishInput.focus();
+    });
+
+    document.getElementById('skipBtn').addEventListener('click', () => {
+      showStep('stepLeaderboard');
+      renderLeaderboard();
+    });
+
+    document.getElementById('submitWishBtn').addEventListener('click', () => {
+      const text = wishInput.value.trim();
+      if (text) saveWish(text, game.caught);
+      showStep('stepLeaderboard');
+      renderLeaderboard();
+    });
+
+    document.getElementById('playAgainBtn').addEventListener('click', startGame);
+
+    // Initial background render
+    draw();
+
+    // Starfield animation on overlay screens
+    const sfCanvas = document.getElementById('starfield');
+    const sfCtx = sfCanvas.getContext('2d');
+    const sfStars = Array.from({ length: 60 }, () => ({
+      x: Math.random(),
+      y: Math.random(),
+      phase: Math.random() * Math.PI * 2,
+      speed: Math.random() * 1.5 + 0.5,
+    }));
+
+    function drawStarfield() {
+      const w = overlay.offsetWidth;
+      const h = overlay.offsetHeight;
+      if (sfCanvas.width !== w) sfCanvas.width = w;
+      if (sfCanvas.height !== h) sfCanvas.height = h;
+
+      sfCtx.clearRect(0, 0, w, h);
+      const t = Date.now() / 1000;
+      for (const s of sfStars) {
+        const alpha = 0.1 + 0.5 * (0.5 + 0.5 * Math.sin(t * s.speed + s.phase));
+        sfCtx.globalAlpha = alpha;
+        sfCtx.fillStyle = '#fff';
+        const size = alpha > 0.4 ? 2 : 1;
+        sfCtx.fillRect(Math.floor(s.x * w), Math.floor(s.y * h), size, size);
+      }
+      sfCtx.globalAlpha = 1;
+    }
+
+    function starfieldLoop() {
+      if (!overlay.classList.contains('hidden')) {
+        drawStarfield();
+      }
+      requestAnimationFrame(starfieldLoop);
+    }
+    starfieldLoop();
+  </script>
+</body>
+</html>
