@@ -188,7 +188,7 @@
         <h1>FALLING STARS</h1>
         <p>MAKE YOUR WISH</p>
         <button id="startBtn" class="retro-btn">PLAY</button>
-        <p class="controls-hint">ARROW KEYS OR TOUCH TO MOVE</p>
+        <p class="controls-hint">TOUCH TO MOVE</p>
       </div>
       <div id="stepStats" class="overlay-step">
         <h1>GAME OVER</h1>
@@ -203,9 +203,10 @@
         <button id="submitWishBtn" class="retro-btn">SUBMIT WISH</button>
       </div>
       <div id="stepLeaderboard" class="overlay-step">
-        <h1>WISH LEADERBOARD</h1>
+        <h1>GLOBAL WISHLIST</h1>
         <div id="leaderboardList"></div>
         <button id="playAgainBtn" class="retro-btn">PLAY AGAIN</button>
+        <button id="homeBtn" class="skip-btn">HOME</button>
       </div>
     </div>
   </div>
@@ -251,20 +252,20 @@
       const osc2 = audioCtx.createOscillator();
       const gain = audioCtx.createGain();
       osc1.type = 'sine';
-      osc1.frequency.setValueAtTime(880, now);
-      osc1.frequency.exponentialRampToValueAtTime(1760, now + 0.08);
+      osc1.frequency.setValueAtTime(40, now);
+      osc1.frequency.exponentialRampToValueAtTime(60, now + 0.3);
       osc2.type = 'sine';
-      osc2.frequency.setValueAtTime(1320, now);
-      osc2.frequency.exponentialRampToValueAtTime(2640, now + 0.1);
-      gain.gain.setValueAtTime(0.15, now);
-      gain.gain.exponentialRampToValueAtTime(0.001, now + 0.25);
+      osc2.frequency.setValueAtTime(80, now);
+      osc2.frequency.exponentialRampToValueAtTime(120, now + 0.25);
+      gain.gain.setValueAtTime(0.25, now);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + 0.4);
       osc1.connect(gain);
       osc2.connect(gain);
       gain.connect(audioCtx.destination);
       osc1.start(now);
       osc2.start(now);
-      osc1.stop(now + 0.25);
-      osc2.stop(now + 0.25);
+      osc1.stop(now + 0.4);
+      osc2.stop(now + 0.4);
     }
 
     // Game state
@@ -575,29 +576,84 @@
       document.getElementById(id).classList.add('active');
     }
 
-    // Wish localStorage helpers
-    const WISH_KEY = 'starCatcherWishes';
-    function loadWishes() {
-      try { return JSON.parse(localStorage.getItem(WISH_KEY)) || []; }
-      catch { return []; }
+    // Supabase config (anon key — safe to embed, RLS restricts access)
+    const SUPABASE_URL = 'https://skgcbeuosvjfprctsicy.supabase.co';
+    const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNrZ2NiZXVvc3ZqZnByY3RzaWN5Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzExOTEzNjIsImV4cCI6MjA4Njc2NzM2Mn0.F0IwdDc_hGdU3W48gdtJdB73vaVBx7BEZ7u2ZdAl2do';
+
+    async function loadWishes() {
+      try {
+        const res = await fetch(
+          `${SUPABASE_URL}/rest/v1/wishes?select=wish,caught,created_at&order=created_at.desc&limit=1000`,
+          { headers: { 'apikey': SUPABASE_KEY, 'Authorization': `Bearer ${SUPABASE_KEY}` } }
+        );
+        if (!res.ok) return [];
+        return await res.json();
+      } catch { return []; }
     }
-    function saveWish(wish, caught) {
-      const wishes = loadWishes();
-      wishes.unshift({ wish, caught, date: Date.now() });
-      if (wishes.length > 50) wishes.length = 50;
-      localStorage.setItem(WISH_KEY, JSON.stringify(wishes));
+
+    async function saveWish(wish, caught) {
+      try {
+        await fetch(`${SUPABASE_URL}/rest/v1/wishes`, {
+          method: 'POST',
+          headers: {
+            'apikey': SUPABASE_KEY,
+            'Authorization': `Bearer ${SUPABASE_KEY}`,
+            'Content-Type': 'application/json',
+            'Prefer': 'return=minimal',
+          },
+          body: JSON.stringify({ wish, caught }),
+        });
+      } catch { /* offline — silently fail */ }
     }
-    function renderLeaderboard() {
-      const wishes = loadWishes();
+
+    const THEMES = {
+      PEACE:      ['peace','calm','sereni','harmon','tranquil','quiet','zen','forgiv','fair','war','conflict','fight','safe'],
+      WEALTH:     ['money','rich','wealth','fortun','million','dollar','salary','income','financ','afford','debt','rent','gold','bank','invest','poor','broke','expens'],
+      FAITH:      ['god','pray','prayer','faith','bless','church','spirit','soul','angel','miracl','heaven','believ','divin','sacred','holy','religio','jesus','allah','buddha'],
+      CREATIVITY: ['music','paint','sing','danc','draw','song','guitar','piano','film','movie','photo','design','craft','poem','novel','band','perform','compos','act'],
+      NATURE:     ['nature','planet','earth','ocean','sea','tree','forest','river','environ','climate','wildlife','ecosystem'],
+      YOUTH:      ['young','youth','age','forever','immortal','past','memor','die','death','eternal','old','back','time'],
+      HEALTH:     ['health','heal','cure','sick','illness','cancer','painf','anxiet','depress','therap','doctor','hospital','surger','sleep','sober','addict','mental','better'],
+      TRAVEL:     ['travel','trip','vacat','explor','adventur','country','visit','abroad','journey','destin','beach','island','paris','tokyo','europ','flight'],
+      FRIENDSHIP: ['friend','companion','buddy','lonely','loneli','someone','puppy','dog','cat','pet','company','talk'],
+      LOVE:       ['love','heart','romanc','marry','wedding','boyfriend','girlfriend','husband','wife','kiss','relationship','crush','dating','soulmate'],
+      SUCCESS:    ['success','career','job','promot','achiev','goal','ambiti','degree','graduat','exam','famous','hire','award','champion'],
+      FREEDOM:    ['free','freedom','escap','libert','independen','quit'],
+      BEAUTY:     ['beauti','pretty','handsome','glow','skin','hair','confiden','fashion','style'],
+      HAPPINESS:  ['happy','joy','smile','laugh','cheerful','bliss'],
+      WISDOM:     ['wisdom','knowledge','learn','smart','study','school','universit','read','teach','book','languag','understand','meaning','truth'],
+      FAMILY:     ['family','mom','dad','mother','father','parent','child','children','kids','son','daughter','brother','sister','baby','grandma','grandpa','nephew','niece','uncle','aunt','cousin'],
+    };
+
+    function classifyWish(text) {
+      const words = text.toLowerCase().split(/\W+/);
+      const matched = [];
+      for (const [theme, keywords] of Object.entries(THEMES)) {
+        if (words.some(w => keywords.some(k => w.startsWith(k)))) {
+          matched.push(theme);
+        }
+      }
+      return matched.length ? matched : ['HOPE'];
+    }
+
+    async function renderLeaderboard() {
+      leaderboardList.innerHTML = '<div class="lb-entry" style="justify-content:center;color:#555;">LOADING...</div>';
+      const wishes = await loadWishes();
       leaderboardList.innerHTML = '';
       if (wishes.length === 0) {
         leaderboardList.innerHTML = '<div class="lb-entry" style="justify-content:center;color:#555;">NO WISHES YET</div>';
         return;
       }
+      const counts = {};
       wishes.forEach(w => {
+        const themes = classifyWish(w.wish);
+        themes.forEach(t => { counts[t] = (counts[t] || 0) + 1; });
+      });
+      const sorted = Object.entries(counts).sort((a, b) => b[1] - a[1]);
+      sorted.forEach(([theme, count]) => {
         const el = document.createElement('div');
         el.className = 'lb-entry';
-        el.innerHTML = `<span class="lb-wish">${w.wish.replace(/</g,'&lt;')}</span><span class="lb-stars">${w.caught} ★</span>`;
+        el.innerHTML = `<span class="lb-wish">${theme}</span><span class="lb-stars">${count} ★</span>`;
         leaderboardList.appendChild(el);
       });
     }
@@ -621,18 +677,18 @@
     });
 
     document.getElementById('skipBtn').addEventListener('click', () => {
-      showStep('stepLeaderboard');
-      renderLeaderboard();
+      showStep('stepStart');
     });
 
-    document.getElementById('submitWishBtn').addEventListener('click', () => {
+    document.getElementById('submitWishBtn').addEventListener('click', async () => {
       const text = wishInput.value.trim();
-      if (text) saveWish(text, game.caught);
+      if (text) await saveWish(text, game.caught);
       showStep('stepLeaderboard');
-      renderLeaderboard();
+      await renderLeaderboard();
     });
 
     document.getElementById('playAgainBtn').addEventListener('click', startGame);
+    document.getElementById('homeBtn').addEventListener('click', () => showStep('stepStart'));
 
     // Initial background render
     draw();
