@@ -243,6 +243,30 @@
     const COL = '#fff';
     const COL_DIM = '#888';
 
+    // Audio — synthesized catch sound via Web Audio API
+    const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    function playCatchSound() {
+      const now = audioCtx.currentTime;
+      const osc1 = audioCtx.createOscillator();
+      const osc2 = audioCtx.createOscillator();
+      const gain = audioCtx.createGain();
+      osc1.type = 'sine';
+      osc1.frequency.setValueAtTime(880, now);
+      osc1.frequency.exponentialRampToValueAtTime(1760, now + 0.08);
+      osc2.type = 'sine';
+      osc2.frequency.setValueAtTime(1320, now);
+      osc2.frequency.exponentialRampToValueAtTime(2640, now + 0.1);
+      gain.gain.setValueAtTime(0.15, now);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + 0.25);
+      osc1.connect(gain);
+      osc2.connect(gain);
+      gain.connect(audioCtx.destination);
+      osc1.start(now);
+      osc2.start(now);
+      osc1.stop(now + 0.25);
+      osc2.stop(now + 0.25);
+    }
+
     // Game state
     let game = null;
     let animFrame = null;
@@ -426,6 +450,7 @@
         if (Math.abs(sx - px) < 8 && Math.abs(sy - py) < 6) {
           game.caught++;
           game.combo++;
+          playCatchSound();
           const bonus = game.combo >= 5 ? 3 : game.combo >= 3 ? 2 : 1;
           game.score += 10 * bonus;
 
@@ -579,6 +604,7 @@
 
     // Start game
     function startGame() {
+      if (audioCtx.state === 'suspended') audioCtx.resume();
       overlay.classList.add('hidden');
       game = initGame();
       if (animFrame) cancelAnimationFrame(animFrame);
