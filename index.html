@@ -354,7 +354,7 @@
     const STAR_TYPES = {
       normal: { speedMult: 1,   points: 10, catchW: 8,  catchH: 6, color: '#fff' },
       slow:   { speedMult: 0.7, points: 5,  catchW: 12, catchH: 9, color: '#fff' },
-      fast:   { speedMult: 1.5, points: 20, catchW: 6,  catchH: 4, color: '#ccc' },
+      fast:   { speedMult: 1.5, points: 20, catchW: 7,  catchH: 5, color: '#ccc' },
     };
 
     function drawSprite(sprite, x, y, color) {
@@ -426,16 +426,16 @@
 
     function spawnStar() {
       const d = game.difficulty;
-      const fastChance = Math.min(0.25, 0.10 + 0.05 * (d - 1));
-      const slowChance = 0.20;
+      const fastChance = d > 1.2 ? Math.min(0.25, 0.05 + 0.08 * (d - 1.2)) : 0;
+      const slowChance = 0.25;
       const roll = Math.random();
       const typeName = roll < fastChance ? 'fast' : roll < fastChance + slowChance ? 'slow' : 'normal';
       const type = STAR_TYPES[typeName];
       game.stars.push({
-        x: Math.floor(Math.random() * (W - 8)) + 2,
+        x: Math.floor(Math.random() * (W - 12)) + 4,
         y: -6,
         vx: (Math.random() * 2 - 1) * 0.15 * d,
-        speed: (Math.random() * 0.4 + 0.3) * type.speedMult * d,
+        speed: Math.min((Math.random() * 0.3 + 0.2) * type.speedMult * d, 1.2),
         type: typeName,
         color: type.color,
         catchW: type.catchW,
@@ -449,8 +449,8 @@
       game.time++;
 
       const timeSec = game.time / 60;
-      game.difficulty = Math.sqrt(1 + 0.04 * timeSec);
-      game.spawnInterval = 20 + 40 / (1 + Math.exp((timeSec - 35) / 15));
+      game.difficulty = 1 + 0.8 / (1 + Math.exp(-(timeSec - 60) / 20));
+      game.spawnInterval = 25 + 55 / (1 + Math.exp((timeSec - 75) / 20));
 
       game.spawnTimer++;
       if (game.spawnTimer >= game.spawnInterval) {
@@ -484,7 +484,7 @@
         const s = game.stars[i];
         // Horizontal drift with wind, capped at 0.5 px/frame
         let dx = s.vx + windOffset * 0.5;
-        dx = Math.max(-0.5, Math.min(0.5, dx));
+        dx = Math.max(-0.3, Math.min(0.3, dx));
         s.x += dx;
         s.y += s.speed;
         // Keep stars on screen horizontally
