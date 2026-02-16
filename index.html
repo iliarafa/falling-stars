@@ -716,12 +716,12 @@
     }
 
     const THEMES = {
-      PEACE:      ['peace','calm','sereni','harmon','tranquil','quiet','zen','forgiv','fair','war','conflict','fight','safe'],
+      PEACE:      ['peace','calm','sereni','harmon','tranquil','quiet','zen','forgiv','war','conflict','fight','safe'],
       WEALTH:     ['money','rich','wealth','fortun','million','dollar','salary','income','financ','afford','debt','rent','gold','bank','invest','poor','broke','expens'],
       FAITH:      ['god','pray','prayer','faith','bless','church','spirit','soul','angel','miracl','heaven','believ','divin','sacred','holy','religio','jesus','allah','buddha'],
       CREATIVITY: ['music','paint','sing','danc','draw','song','guitar','piano','film','movie','photo','design','craft','poem','novel','band','perform','compos','act'],
-      NATURE:     ['nature','planet','earth','ocean','sea','tree','forest','river','environ','climate','wildlife','ecosystem'],
-      YOUTH:      ['young','youth','age','forever','immortal','past','memor','die','death','eternal','old','back','time'],
+      NATURE:     ['nature','planet','earth','ocean','sea','tree','forest','river','environ','climate','wildlife','ecosystem','rain','snow','sun','moon','mountain','sky','flower','animal','weather'],
+      YOUTH:      ['young','youth','age','forever','immortal','past','memor','die','death','eternal','old'],
       HEALTH:     ['health','heal','cure','sick','illness','cancer','painf','anxiet','depress','therap','doctor','hospital','surger','sleep','sober','addict','mental','better'],
       TRAVEL:     ['travel','trip','vacat','explor','adventur','country','visit','abroad','journey','destin','beach','island','paris','tokyo','europ','flight'],
       FRIENDSHIP: ['friend','companion','buddy','lonely','loneli','someone','puppy','dog','cat','pet','company','talk'],
@@ -732,17 +732,35 @@
       HAPPINESS:  ['happy','joy','smile','laugh','cheerful','bliss'],
       WISDOM:     ['wisdom','knowledge','learn','smart','study','school','universit','read','teach','book','languag','understand','meaning','truth'],
       FAMILY:     ['family','mom','dad','mother','father','parent','child','children','kids','son','daughter','brother','sister','baby','grandma','grandpa','nephew','niece','uncle','aunt','cousin'],
+      HOME:       ['home','house','apart','room','shelter','roof','garden','land','build','space','neighbor'],
+      POWER:      ['power','strong','strength','super','fly','magic','invincib','invisible','teleport','abilit','immortal','fast','brave','courag'],
+      COMFORT:    ['food','eat','warm','comfort','meal','hungry','cloth','cook','rest','enough','stab'],
+      JUSTICE:    ['justic','equal','rights','discrim','racist','raci','oppress','vote','democra','corrupt'],
+      LUCK:       ['luck','lucky','chanc','fortun','win','lotter','fate','destin','star'],
+      WONDER:     ['dream','imagin','fantasy','universe','cosmos','alien','dimension','miracl'],
+      CHANGE:     ['differ','fresh','restart','transform','redo','reset'],
+    };
+
+    const VERB_THEMES = {
+      WONDER: ['to wonder'],
+      CHANGE: ['to change'],
     };
 
     function classifyWish(text) {
-      const words = text.toLowerCase().split(/\W+/);
+      const lower = text.toLowerCase();
+      const words = lower.split(/\W+/);
       const matched = [];
       for (const [theme, keywords] of Object.entries(THEMES)) {
         if (words.some(w => keywords.some(k => w.startsWith(k)))) {
           matched.push(theme);
         }
       }
-      return matched.length ? matched : ['HOPE'];
+      for (const [theme, phrases] of Object.entries(VERB_THEMES)) {
+        if (!matched.includes(theme) && phrases.some(p => lower.includes(p))) {
+          matched.push(theme);
+        }
+      }
+      return matched.length ? matched : ['WONDER'];
     }
 
     async function renderLeaderboard() {
