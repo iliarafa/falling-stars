@@ -39,12 +39,8 @@
     }
     canvas#game {
       display: block;
-      width: 100vw;
-      height: 100vh;
-      object-fit: contain;
       image-rendering: pixelated;
       image-rendering: crisp-edges;
-      -ms-interpolation-mode: nearest-neighbor;
     }
     #overlay {
       position: fixed;
@@ -226,10 +222,26 @@
 
     // Pixel scale: render at low-res, scale up with nearest-neighbor
     const SCALE = 4;
+    const DPR = window.devicePixelRatio || 1;
     const W = Math.floor(Math.min(480, window.innerWidth) / SCALE);
     const H = Math.floor(Math.min(700, window.innerHeight) / SCALE);
-    canvas.width = W * SCALE;
-    canvas.height = H * SCALE;
+
+    // Compute CSS display size (maintain aspect ratio, fill viewport)
+    const aspect = W / H;
+    let cssW, cssH;
+    if (window.innerWidth / window.innerHeight > aspect) {
+      cssH = window.innerHeight;
+      cssW = Math.floor(cssH * aspect);
+    } else {
+      cssW = window.innerWidth;
+      cssH = Math.floor(cssW / aspect);
+    }
+
+    // Canvas backing store matches device pixels — no CSS upscaling needed
+    canvas.width = Math.round(cssW * DPR);
+    canvas.height = Math.round(cssH * DPR);
+    canvas.style.width = cssW + 'px';
+    canvas.style.height = cssH + 'px';
 
     // Low-res offscreen canvas
     const offCanvas = document.createElement('canvas');
@@ -330,6 +342,36 @@
       [1,1,1],
       [0,1,0],
     ];
+
+    // Bitmap pixel font (3×5, no anti-aliasing)
+    // Each row is a 3-bit mask: bit2=left, bit1=center, bit0=right
+    const FONT = {
+      'A':[2,5,7,5,5],'B':[6,5,6,5,6],'C':[3,4,4,4,3],'D':[6,5,5,5,6],
+      'E':[7,4,7,4,7],'F':[7,4,7,4,4],'G':[3,4,5,5,7],'H':[5,5,7,5,5],
+      'I':[7,2,2,2,7],'J':[1,1,1,5,2],'K':[5,5,6,5,5],'L':[4,4,4,4,7],
+      'M':[5,7,5,5,5],'N':[6,5,5,5,5],'O':[2,5,5,5,2],'P':[6,5,6,4,4],
+      'Q':[2,5,5,3,3],'R':[6,5,6,5,5],'S':[3,4,2,1,6],'T':[7,2,2,2,2],
+      'U':[5,5,5,5,7],'V':[5,5,5,5,2],'W':[5,5,5,7,5],'X':[5,5,2,5,5],
+      'Y':[5,5,2,2,2],'Z':[7,1,2,4,7],
+      '0':[7,5,5,5,7],'1':[2,6,2,2,7],'2':[7,1,7,4,7],'3':[7,1,7,1,7],
+      '4':[5,5,7,1,1],'5':[7,4,7,1,7],'6':[7,4,7,5,7],'7':[7,1,1,1,1],
+      '8':[7,5,7,5,7],'9':[7,5,7,1,7],' ':[0,0,0,0,0],
+    };
+    function drawText(text, x, y, color) {
+      off.fillStyle = color;
+      let cx = Math.floor(x);
+      const cy = Math.floor(y);
+      for (const ch of text) {
+        const g = FONT[ch] || FONT[' '];
+        for (let r = 0; r < 5; r++) {
+          const bits = g[r];
+          if (bits & 4) off.fillRect(cx, cy + r, 1, 1);
+          if (bits & 2) off.fillRect(cx + 1, cy + r, 1, 1);
+          if (bits & 1) off.fillRect(cx + 2, cy + r, 1, 1);
+        }
+        cx += 4;
+      }
+    }
 
     // Star type definitions (risk-reward variants)
     const STAR_TYPES = {
@@ -513,7 +555,7 @@
 
       if (!game) {
         ctx.imageSmoothingEnabled = false;
-        ctx.drawImage(offCanvas, 0, 0, W * SCALE, H * SCALE);
+        ctx.drawImage(offCanvas, 0, 0, canvas.width, canvas.height);
         return;
       }
 
@@ -533,10 +575,7 @@
       }
 
       // HUD - Stars (top left)
-      off.fillStyle = COL;
-      off.font = '6px monospace';
-      off.textAlign = 'left';
-      off.fillText(`STARS ${game.caught}`, 2, 7);
+      drawText(`STARS ${game.caught}`, 2, 2, COL);
 
       // HUD - Lives (top right, as small star sprites)
       const remaining = game.maxMissed - game.missed;
@@ -548,7 +587,7 @@
 
       // Scale up to display canvas (nearest-neighbor)
       ctx.imageSmoothingEnabled = false;
-      ctx.drawImage(offCanvas, 0, 0, W * SCALE, H * SCALE);
+      ctx.drawImage(offCanvas, 0, 0, canvas.width, canvas.height);
     }
 
     function loop() {
