@@ -135,6 +135,25 @@
       margin-top: 12px;
     }
     .skip-btn:hover { color: #999; }
+    #muteToggle {
+      position: fixed;
+      bottom: 24px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: transparent;
+      border: none;
+      color: #666;
+      font-family: "Press Start 2P", monospace;
+      font-size: 9px;
+      cursor: pointer;
+      text-transform: uppercase;
+      letter-spacing: 2px;
+      z-index: 11;
+      padding: 8px 16px;
+      transition: color 0.15s;
+    }
+    #muteToggle:hover { color: #999; }
+    #muteToggle.hidden { display: none; }
     #wishInput {
       background: #000;
       border: 2px solid #fff;
@@ -204,6 +223,7 @@
       </div>
     </div>
   </div>
+  <button id="muteToggle">SOUND ON</button>
 
   <script>
     const canvas = document.getElementById('game');
@@ -276,6 +296,60 @@
       osc1.stop(now + 0.4);
       osc2.stop(now + 0.4);
     }
+
+    // Background music — pre-decode into AudioBuffer for instant playback
+    const muteToggle = document.getElementById('muteToggle');
+    let musicBuffer = null;
+    let musicSource = null;
+    let musicGain = audioCtx.createGain();
+    musicGain.connect(audioCtx.destination);
+    let musicStarted = false;
+    let musicMuted = false;
+    let wantsMusic = false;
+
+    // Fetch and decode the audio file immediately on load
+    fetch('stars.mp3')
+      .then(r => r.arrayBuffer())
+      .then(buf => audioCtx.decodeAudioData(buf))
+      .then(decoded => {
+        musicBuffer = decoded;
+        if (wantsMusic) startMusic();
+      })
+      .catch(() => {});
+
+    function startMusic() {
+      wantsMusic = true;
+      if (musicStarted || !musicBuffer) return;
+      musicStarted = true;
+      audioCtx.resume().then(() => {
+        musicSource = audioCtx.createBufferSource();
+        musicSource.buffer = musicBuffer;
+        musicSource.loop = true;
+        musicSource.connect(musicGain);
+        musicSource.start(0);
+      });
+    }
+
+    muteToggle.addEventListener('click', () => {
+      if (!musicStarted) {
+        startMusic();
+        return;
+      }
+      musicMuted = !musicMuted;
+      musicGain.gain.value = musicMuted ? 0 : 1;
+      muteToggle.textContent = musicMuted ? 'SOUND OFF' : 'SOUND ON';
+    });
+
+    // Start music on any first interaction
+    function onFirstInteraction() {
+      startMusic();
+      if (musicStarted) {
+        document.removeEventListener('click', onFirstInteraction);
+        document.removeEventListener('touchstart', onFirstInteraction);
+      }
+    }
+    document.addEventListener('click', onFirstInteraction);
+    document.addEventListener('touchstart', onFirstInteraction);
 
     // Game state
     let game = null;
@@ -598,6 +672,7 @@
         showStep('stepStats');
         statsCaught.textContent = `STARS: ${game.caught}`;
         overlay.classList.remove('hidden');
+        muteToggle.classList.remove('hidden');
         return;
       }
 
@@ -695,7 +770,9 @@
     // Start game
     function startGame() {
       if (audioCtx.state === 'suspended') audioCtx.resume();
+      startMusic();
       overlay.classList.add('hidden');
+      muteToggle.classList.add('hidden');
       game = initGame();
       if (animFrame) cancelAnimationFrame(animFrame);
       loop();
