@@ -192,7 +192,6 @@
       <div id="stepStats" class="overlay-step">
         <h1>GAME OVER</h1>
         <div class="score-display" id="statsCaught"></div>
-        <div class="score-display" id="statsScore"></div>
         <button id="wishBtn" class="retro-btn">MAKE YOUR WISH</button>
         <button id="skipBtn" class="skip-btn">SKIP</button>
       </div>
@@ -222,7 +221,6 @@
     const stepWish = document.getElementById('stepWish');
     const stepLeaderboard = document.getElementById('stepLeaderboard');
     const statsCaught = document.getElementById('statsCaught');
-    const statsScore = document.getElementById('statsScore');
     const wishInput = document.getElementById('wishInput');
     const leaderboardList = document.getElementById('leaderboardList');
 
@@ -335,9 +333,9 @@
 
     // Star type definitions (risk-reward variants)
     const STAR_TYPES = {
-      normal: { speedMult: 1,   points: 10, catchW: 8,  catchH: 6, color: '#fff' },
-      slow:   { speedMult: 0.7, points: 5,  catchW: 12, catchH: 9, color: '#fff' },
-      fast:   { speedMult: 1.5, points: 20, catchW: 7,  catchH: 5, color: '#ccc' },
+      normal: { speedMult: 1,   catchW: 8,  catchH: 6, color: '#fff' },
+      slow:   { speedMult: 0.7, catchW: 12, catchH: 9, color: '#fff' },
+      fast:   { speedMult: 1.5, catchW: 7,  catchH: 5, color: '#ccc' },
     };
 
     function drawSprite(sprite, x, y, color) {
@@ -392,7 +390,6 @@
         player: { x: Math.floor(W / 2) - 5, y: H - 17, w: 11, h: 12, speed: 1.5, dir: 0 },
         stars: [],
         particles: [],
-        score: 0,
         caught: 0,
         missed: 0,
         maxMissed: 5,
@@ -401,8 +398,6 @@
         difficulty: 1,
         time: 0,
         gameOver: false,
-        combo: 0,
-        comboText: null,
         lastStarX: Math.floor(W / 2),
       };
     }
@@ -428,7 +423,6 @@
         color: type.color,
         catchW: type.catchW,
         catchH: type.catchH,
-        points: type.points,
       });
     }
 
@@ -475,13 +469,7 @@
         const sy = s.y + 2;
         if (Math.abs(sx - px) < s.catchW && Math.abs(sy - py) < s.catchH) {
           game.caught++;
-          game.combo++;
           playCatchSound();
-          game.score += Math.floor(s.points * Math.pow(1 + 0.2 * game.combo, 1.2));
-
-          if (game.combo >= 3) {
-            game.comboText = { text: `${game.combo}X COMBO`, y: p.y - 6, life: 1 };
-          }
 
           for (let j = 0; j < 8; j++) {
             game.particles.push(new Particle(sx, sy));
@@ -494,7 +482,6 @@
         if (s.y > H + 6) {
           game.stars.splice(i, 1);
           game.missed++;
-          game.combo = 0;
           if (game.missed >= game.maxMissed) {
             game.gameOver = true;
           }
@@ -507,12 +494,6 @@
         if (game.particles[i].life <= 0) game.particles.splice(i, 1);
       }
 
-      // Update combo text
-      if (game.comboText) {
-        game.comboText.y -= 0.15;
-        game.comboText.life -= 0.015;
-        if (game.comboText.life <= 0) game.comboText = null;
-      }
     }
 
     function draw() {
@@ -551,21 +532,11 @@
         pt.draw();
       }
 
-      // Combo text
-      if (game.comboText) {
-        off.globalAlpha = game.comboText.life;
-        off.fillStyle = COL;
-        off.font = '6px monospace';
-        off.textAlign = 'center';
-        off.fillText(game.comboText.text, Math.floor(W / 2), Math.floor(game.comboText.y));
-        off.globalAlpha = 1;
-      }
-
-      // HUD - Score (top left)
+      // HUD - Stars (top left)
       off.fillStyle = COL;
       off.font = '6px monospace';
       off.textAlign = 'left';
-      off.fillText(`SCORE ${game.score}`, 2, 7);
+      off.fillText(`STARS ${game.caught}`, 2, 7);
 
       // HUD - Lives (top right, as small star sprites)
       const remaining = game.maxMissed - game.missed;
@@ -586,8 +557,7 @@
 
       if (game && game.gameOver) {
         showStep('stepStats');
-        statsCaught.textContent = `STARS CAUGHT: ${game.caught}`;
-        statsScore.textContent = `SCORE: ${game.score}`;
+        statsCaught.textContent = `STARS: ${game.caught}`;
         overlay.classList.remove('hidden');
         return;
       }
@@ -672,7 +642,7 @@
       const counts = {};
       wishes.forEach(w => {
         const themes = classifyWish(w.wish);
-        themes.forEach(t => { counts[t] = (counts[t] || 0) + 1; });
+        themes.forEach(t => { counts[t] = (counts[t] || 0) + (w.caught || 1); });
       });
       const sorted = Object.entries(counts).sort((a, b) => b[1] - a[1]);
       sorted.forEach(([theme, count]) => {
