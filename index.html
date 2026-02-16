@@ -333,23 +333,6 @@
       [0,1,0],
     ];
 
-    // 1D Perlin noise helper (2 octaves, returns [-1, 1])
-    const _perm = new Uint8Array(512);
-    { const p = new Uint8Array(256); for (let i = 0; i < 256; i++) p[i] = i;
-      for (let i = 255; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [p[i], p[j]] = [p[j], p[i]]; }
-      for (let i = 0; i < 512; i++) _perm[i] = p[i & 255];
-    }
-    function _grad1(hash, x) { return (hash & 1) ? x : -x; }
-    function _noise1(x) {
-      const xi = Math.floor(x) & 255;
-      const xf = x - Math.floor(x);
-      const u = xf * xf * (3 - 2 * xf);
-      return _grad1(_perm[xi], xf) * (1 - u) + _grad1(_perm[xi + 1], xf - 1) * u;
-    }
-    function perlin1D(x) {
-      return _noise1(x) * 0.7 + _noise1(x * 2) * 0.3;
-    }
-
     // Star type definitions (risk-reward variants)
     const STAR_TYPES = {
       normal: { speedMult: 1,   points: 10, catchW: 8,  catchH: 6, color: '#fff' },
@@ -420,7 +403,7 @@
         gameOver: false,
         combo: 0,
         comboText: null,
-        windTime: 0,
+        lastStarX: Math.floor(W / 2),
       };
     }
 
@@ -431,10 +414,15 @@
       const roll = Math.random();
       const typeName = roll < fastChance ? 'fast' : roll < fastChance + slowChance ? 'slow' : 'normal';
       const type = STAR_TYPES[typeName];
+      const maxDrift = Math.floor(game.spawnInterval * game.player.speed);
+      const lastX = game.lastStarX;
+      const minX = Math.max(4, lastX - maxDrift);
+      const maxX = Math.min(W - 8, lastX + maxDrift);
+      const x = Math.floor(Math.random() * (maxX - minX)) + minX;
+      game.lastStarX = x;
       game.stars.push({
-        x: Math.floor(Math.random() * (W - 12)) + 4,
+        x: x,
         y: -6,
-        vx: (Math.random() * 2 - 1) * 0.15 * d,
         speed: Math.min((Math.random() * 0.3 + 0.2) * type.speedMult * d, 1.2),
         type: typeName,
         color: type.color,
@@ -475,20 +463,10 @@
       if (!moving) p.dir = 0;
       p.x = Math.max(0, Math.min(W - p.w, p.x));
 
-      // Wind from Perlin noise
-      const windOffset = perlin1D(game.windTime) * 0.1;
-      game.windTime += 0.01;
-
       // Update stars
       for (let i = game.stars.length - 1; i >= 0; i--) {
         const s = game.stars[i];
-        // Horizontal drift with wind, capped at 0.5 px/frame
-        let dx = s.vx + windOffset * 0.5;
-        dx = Math.max(-0.3, Math.min(0.3, dx));
-        s.x += dx;
         s.y += s.speed;
-        // Keep stars on screen horizontally
-        s.x = Math.max(0, Math.min(W - 5, s.x));
 
         // Catch detection (center-to-center, per-type catch window)
         const px = p.x + 5;
