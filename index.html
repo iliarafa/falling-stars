@@ -333,6 +333,30 @@
       [0,1,0],
     ];
 
+    // 1D Perlin noise helper (2 octaves, returns [-1, 1])
+    const _perm = new Uint8Array(512);
+    { const p = new Uint8Array(256); for (let i = 0; i < 256; i++) p[i] = i;
+      for (let i = 255; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [p[i], p[j]] = [p[j], p[i]]; }
+      for (let i = 0; i < 512; i++) _perm[i] = p[i & 255];
+    }
+    function _grad1(hash, x) { return (hash & 1) ? x : -x; }
+    function _noise1(x) {
+      const xi = Math.floor(x) & 255;
+      const xf = x - Math.floor(x);
+      const u = xf * xf * (3 - 2 * xf);
+      return _grad1(_perm[xi], xf) * (1 - u) + _grad1(_perm[xi + 1], xf - 1) * u;
+    }
+    function perlin1D(x) {
+      return _noise1(x) * 0.7 + _noise1(x * 2) * 0.3;
+    }
+
+    // Star type definitions (risk-reward variants)
+    const STAR_TYPES = {
+      normal: { speedMult: 1,   points: 10, catchW: 8,  catchH: 6, color: '#fff' },
+      slow:   { speedMult: 0.7, points: 5,  catchW: 12, catchH: 9, color: '#fff' },
+      fast:   { speedMult: 1.5, points: 20, catchW: 6,  catchH: 4, color: '#ccc' },
+    };
+
     function drawSprite(sprite, x, y, color) {
       off.fillStyle = color;
       const sx = Math.floor(x);
@@ -396,14 +420,27 @@
         gameOver: false,
         combo: 0,
         comboText: null,
+        windTime: 0,
       };
     }
 
     function spawnStar() {
+      const d = game.difficulty;
+      const fastChance = Math.min(0.25, 0.10 + 0.05 * (d - 1));
+      const slowChance = 0.20;
+      const roll = Math.random();
+      const typeName = roll < fastChance ? 'fast' : roll < fastChance + slowChance ? 'slow' : 'normal';
+      const type = STAR_TYPES[typeName];
       game.stars.push({
         x: Math.floor(Math.random() * (W - 8)) + 2,
         y: -6,
-        speed: (Math.random() * 0.4 + 0.3) * game.difficulty,
+        vx: (Math.random() * 2 - 1) * 0.15 * d,
+        speed: (Math.random() * 0.4 + 0.3) * type.speedMult * d,
+        type: typeName,
+        color: type.color,
+        catchW: type.catchW,
+        catchH: type.catchH,
+        points: type.points,
       });
     }
 
@@ -411,8 +448,9 @@
       if (game.gameOver) return;
       game.time++;
 
-      game.difficulty = 1 + game.time * 0.0003;
-      game.spawnInterval = Math.max(20, 60 - game.time * 0.01);
+      const timeSec = game.time / 60;
+      game.difficulty = Math.sqrt(1 + 0.04 * timeSec);
+      game.spawnInterval = 20 + 40 / (1 + Math.exp((timeSec - 35) / 15));
 
       game.spawnTimer++;
       if (game.spawnTimer >= game.spawnInterval) {
@@ -437,22 +475,31 @@
       if (!moving) p.dir = 0;
       p.x = Math.max(0, Math.min(W - p.w, p.x));
 
+      // Wind from Perlin noise
+      const windOffset = perlin1D(game.windTime) * 0.1;
+      game.windTime += 0.01;
+
       // Update stars
       for (let i = game.stars.length - 1; i >= 0; i--) {
         const s = game.stars[i];
+        // Horizontal drift with wind, capped at 0.5 px/frame
+        let dx = s.vx + windOffset * 0.5;
+        dx = Math.max(-0.5, Math.min(0.5, dx));
+        s.x += dx;
         s.y += s.speed;
+        // Keep stars on screen horizontally
+        s.x = Math.max(0, Math.min(W - 5, s.x));
 
-        // Catch detection (center-to-center)
+        // Catch detection (center-to-center, per-type catch window)
         const px = p.x + 5;
         const py = p.y + 4;
         const sx = s.x + 2;
         const sy = s.y + 2;
-        if (Math.abs(sx - px) < 8 && Math.abs(sy - py) < 6) {
+        if (Math.abs(sx - px) < s.catchW && Math.abs(sy - py) < s.catchH) {
           game.caught++;
           game.combo++;
           playCatchSound();
-          const bonus = game.combo >= 5 ? 3 : game.combo >= 3 ? 2 : 1;
-          game.score += 10 * bonus;
+          game.score += Math.floor(s.points * Math.pow(1 + 0.2 * game.combo, 1.2));
 
           if (game.combo >= 3) {
             game.comboText = { text: `${game.combo}X COMBO`, y: p.y - 6, life: 1 };
@@ -511,10 +558,11 @@
         return;
       }
 
-      // Falling stars (animated between two frames)
-      const frame = Math.floor(game.time / 20) % 2;
+      // Falling stars (animated between two frames, fast stars flicker 2x speed)
       for (const s of game.stars) {
-        drawSprite(STAR_SPRITES[frame], s.x, s.y, COL);
+        const rate = s.type === 'fast' ? 10 : 20;
+        const frame = Math.floor(game.time / rate) % 2;
+        drawSprite(STAR_SPRITES[frame], s.x, s.y, s.color);
       }
 
       // Player
