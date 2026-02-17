@@ -331,52 +331,45 @@
       osc2.stop(now + dur + 0.3);
     }
 
-    // Background music — pre-decode into AudioBuffer for instant playback
+    // Background music — Web Audio API (works in Capacitor WKWebView)
     const muteToggle = document.getElementById('muteToggle');
     let musicBuffer = null;
     let musicSource = null;
     let musicGain = audioCtx.createGain();
-    musicGain.gain.value = 5;
     musicGain.connect(audioCtx.destination);
     let musicStarted = false;
     let musicMuted = false;
-    let wantsMusic = false;
 
-    // Fetch and decode the audio file immediately on load
+    // Preload music into an AudioBuffer
     fetch('stars.mp3')
       .then(r => r.arrayBuffer())
       .then(buf => audioCtx.decodeAudioData(buf))
-      .then(decoded => {
-        musicBuffer = decoded;
-        if (wantsMusic) startMusic();
-      })
-      .catch(() => {});
+      .then(decoded => { musicBuffer = decoded; });
 
     function startMusic() {
-      wantsMusic = true;
       if (musicStarted || !musicBuffer) return;
+      musicSource = audioCtx.createBufferSource();
+      musicSource.buffer = musicBuffer;
+      musicSource.loop = true;
+      musicSource.connect(musicGain);
+      musicSource.start();
       musicStarted = true;
-      audioCtx.resume().then(() => {
-        musicSource = audioCtx.createBufferSource();
-        musicSource.buffer = musicBuffer;
-        musicSource.loop = true;
-        musicSource.connect(musicGain);
-        musicSource.start(0);
-      });
     }
 
     muteToggle.addEventListener('click', () => {
       if (!musicStarted) {
+        if (audioCtx.state === 'suspended') audioCtx.resume();
         startMusic();
         return;
       }
       musicMuted = !musicMuted;
-      musicGain.gain.value = musicMuted ? 0 : 5;
+      musicGain.gain.value = musicMuted ? 0 : 1;
       muteToggle.textContent = musicMuted ? 'SOUND OFF' : 'SOUND ON';
     });
 
     // Start music on any first interaction
     function onFirstInteraction() {
+      if (audioCtx.state === 'suspended') audioCtx.resume();
       startMusic();
       if (musicStarted) {
         document.removeEventListener('click', onFirstInteraction);
