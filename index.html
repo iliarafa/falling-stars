@@ -273,62 +273,39 @@
     const COL = '#fff';
     const COL_DIM = '#888';
 
-    // Audio — dreamy dynamic catch sound via Web Audio API
+    // Audio — cycling chime catch sounds via Web Audio API
     const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-    let lastCatchTime = 0;
+    const CHIME_FREQS = [369.99, 440.00, 293.66]; // F#4 → A4 → D4
+    let chimeIndex = 0;
     function playCatchSound() {
       const now = audioCtx.currentTime;
-      const gap = lastCatchTime ? now - lastCatchTime : 2;
-      lastCatchTime = now;
+      const freq = CHIME_FREQS[chimeIndex];
+      chimeIndex = (chimeIndex + 1) % CHIME_FREQS.length;
 
-      // t = 0 (rapid) to 1 (slow), clamped
-      const t = Math.min(gap, 2) / 2;
-
-      // Deep dreamy frequencies, all under 100 Hz
-      const f1 = 40 + (1 - t) * 25;
-      const f2 = 55 + (1 - t) * 40;
-      const f1End = 30 + (1 - t) * 20;
-      const f2End = 45 + (1 - t) * 35;
-
-      // Longer decay for dreamy tail
-      const dur = 0.6 + t * 0.4;
-
-      // More detune = dreamier shimmer on rapid catches
-      const detune = 5 + (1 - t) * 10;
-
+      // Fundamental
       const osc1 = audioCtx.createOscillator();
+      const gain1 = audioCtx.createGain();
+      osc1.type = 'sine';
+      osc1.frequency.value = freq;
+      gain1.gain.setValueAtTime(0.18, now);
+      gain1.gain.exponentialRampToValueAtTime(0.001, now + 0.4);
+      osc1.connect(gain1);
+      gain1.connect(audioCtx.destination);
+
+      // Overtone (3× frequency for bell character)
       const osc2 = audioCtx.createOscillator();
-      const gain = audioCtx.createGain();
-
-      osc1.type = 'triangle';
-      osc1.frequency.setValueAtTime(f1, now);
-      osc1.frequency.exponentialRampToValueAtTime(f1End, now + dur);
-
-      osc2.type = 'triangle';
-      osc2.frequency.setValueAtTime(f2, now);
-      osc2.frequency.exponentialRampToValueAtTime(f2End, now + dur);
-      osc2.detune.value = detune;
-
-      gain.gain.setValueAtTime(0.18, now);
-      gain.gain.exponentialRampToValueAtTime(0.001, now + dur);
-
-      osc1.connect(gain);
-      osc2.connect(gain);
-      gain.connect(audioCtx.destination);
-
-      // Dreamy delay echo
-      const delay = audioCtx.createDelay();
-      const delayGain = audioCtx.createGain();
-      delay.delayTime.value = 0.1 + t * 0.1;
-      delayGain.gain.value = 0.12 + t * 0.08;
-      gain.connect(delay);
-      delay.connect(delayGain);
-      delayGain.connect(audioCtx.destination);
+      const gain2 = audioCtx.createGain();
+      osc2.type = 'sine';
+      osc2.frequency.value = freq * 3;
+      gain2.gain.setValueAtTime(0.06, now);
+      gain2.gain.exponentialRampToValueAtTime(0.001, now + 0.24);
+      osc2.connect(gain2);
+      gain2.connect(audioCtx.destination);
 
       osc1.start(now);
       osc2.start(now);
-      osc1.stop(now + dur + 0.3);
-      osc2.stop(now + dur + 0.3);
+      osc1.stop(now + 0.4);
+      osc2.stop(now + 0.24);
     }
 
     // Background music — Web Audio API (works in Capacitor WKWebView)
@@ -420,23 +397,23 @@
       [0,0,0,1,1,0,1,1,0,0,0],
     ];
 
-    // Star: two animation frames (5 x 5)
-    const STAR_SPRITES = [
+    // Star sprites at multiple sizes, each with two animation frames
+    const STAR_SPRITE_SETS = [
+      // Tiny (2x2) — small dot, both frames identical
+      [ [[1,1],[1,1]], [[1,0],[0,1]] ],
+      // Small (3x3) — diamond and cross
       [
-        [0,0,1,0,0],
-        [0,1,1,1,0],
-        [1,1,1,1,1],
-        [0,1,1,1,0],
-        [0,0,1,0,0],
+        [ [0,1,0], [1,1,1], [0,1,0] ],
+        [ [1,0,1], [0,1,0], [1,0,1] ],
       ],
+      // Medium (5x5) — original star sprites
       [
-        [0,0,1,0,0],
-        [1,0,1,0,1],
-        [0,1,1,1,0],
-        [1,0,1,0,1],
-        [0,0,1,0,0],
+        [ [0,0,1,0,0], [0,1,1,1,0], [1,1,1,1,1], [0,1,1,1,0], [0,0,1,0,0] ],
+        [ [0,0,1,0,0], [1,0,1,0,1], [0,1,1,1,0], [1,0,1,0,1], [0,0,1,0,0] ],
       ],
     ];
+    // Keep STAR_SPRITES as alias for backwards compat (HUD etc.)
+    const STAR_SPRITES = STAR_SPRITE_SETS[2];
 
     // Life indicator (3 x 3)
     const LIFE_SPRITE = [
@@ -476,11 +453,19 @@
     }
 
     // Star type definitions (risk-reward variants)
+    // catchW/catchH are base values, scaled per sprite size
     const STAR_TYPES = {
       normal: { speedMult: 1,   catchW: 8,  catchH: 6, color: '#fff' },
       slow:   { speedMult: 0.7, catchW: 12, catchH: 9, color: '#fff' },
       fast:   { speedMult: 1.5, catchW: 7,  catchH: 5, color: '#ccc' },
     };
+
+    // Size definitions: sprites, hitbox scale, spawn y-offset
+    const STAR_SIZES = [
+      { sprites: STAR_SPRITE_SETS[0], catchScale: 0.5, spawnY: -3 }, // tiny
+      { sprites: STAR_SPRITE_SETS[1], catchScale: 0.7, spawnY: -4 }, // small
+      { sprites: STAR_SPRITE_SETS[2], catchScale: 1.0, spawnY: -6 }, // medium
+    ];
 
     function drawSprite(sprite, x, y, color) {
       off.fillStyle = color;
@@ -553,6 +538,9 @@
       const roll = Math.random();
       const typeName = roll < fastChance ? 'fast' : roll < fastChance + slowChance ? 'slow' : 'normal';
       const type = STAR_TYPES[typeName];
+      // Pick random size: ~30% tiny, ~45% small, ~25% medium
+      const sizeRoll = Math.random();
+      const size = sizeRoll < 0.30 ? STAR_SIZES[0] : sizeRoll < 0.75 ? STAR_SIZES[1] : STAR_SIZES[2];
       const maxDrift = Math.floor(game.spawnInterval * game.player.speed);
       const lastX = game.lastStarX;
       const minX = Math.max(4, lastX - maxDrift);
@@ -561,12 +549,13 @@
       game.lastStarX = x;
       game.stars.push({
         x: x,
-        y: -6,
+        y: size.spawnY,
         speed: Math.min((Math.random() * 0.3 + 0.2) * type.speedMult * d, 1.2),
         type: typeName,
         color: type.color,
-        catchW: type.catchW,
-        catchH: type.catchH,
+        catchW: Math.round(type.catchW * size.catchScale),
+        catchH: Math.round(type.catchH * size.catchScale),
+        sprites: size.sprites,
       });
     }
 
@@ -665,7 +654,7 @@
       for (const s of game.stars) {
         const rate = s.type === 'fast' ? 10 : 20;
         const frame = Math.floor(game.time / rate) % 2;
-        drawSprite(STAR_SPRITES[frame], s.x, s.y, s.color);
+        drawSprite(s.sprites[frame], s.x, s.y, s.color);
       }
 
       // Player
