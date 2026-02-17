@@ -205,7 +205,7 @@
         <p class="controls-hint">TOUCH TO MOVE</p>
       </div>
       <div id="stepStats" class="overlay-step">
-        <h1>GAME OVER</h1>
+        <h1>END OF EVENT</h1>
         <div class="score-display" id="statsCaught"></div>
         <button id="wishBtn" class="retro-btn">MAKE YOUR WISH</button>
         <button id="skipBtn" class="skip-btn">SKIP</button>
@@ -302,6 +302,7 @@
     let musicBuffer = null;
     let musicSource = null;
     let musicGain = audioCtx.createGain();
+    musicGain.gain.value = 5;
     musicGain.connect(audioCtx.destination);
     let musicStarted = false;
     let musicMuted = false;
@@ -336,7 +337,7 @@
         return;
       }
       musicMuted = !musicMuted;
-      musicGain.gain.value = musicMuted ? 0 : 1;
+      musicGain.gain.value = musicMuted ? 0 : 5;
       muteToggle.textContent = musicMuted ? 'SOUND OFF' : 'SOUND ON';
     });
 
