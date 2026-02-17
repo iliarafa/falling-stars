@@ -273,28 +273,62 @@
     const COL = '#fff';
     const COL_DIM = '#888';
 
-    // Audio — synthesized catch sound via Web Audio API
+    // Audio — dreamy dynamic catch sound via Web Audio API
     const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    let lastCatchTime = 0;
     function playCatchSound() {
       const now = audioCtx.currentTime;
+      const gap = lastCatchTime ? now - lastCatchTime : 2;
+      lastCatchTime = now;
+
+      // t = 0 (rapid) to 1 (slow), clamped
+      const t = Math.min(gap, 2) / 2;
+
+      // Deep dreamy frequencies, all under 100 Hz
+      const f1 = 40 + (1 - t) * 25;
+      const f2 = 55 + (1 - t) * 40;
+      const f1End = 30 + (1 - t) * 20;
+      const f2End = 45 + (1 - t) * 35;
+
+      // Longer decay for dreamy tail
+      const dur = 0.6 + t * 0.4;
+
+      // More detune = dreamier shimmer on rapid catches
+      const detune = 5 + (1 - t) * 10;
+
       const osc1 = audioCtx.createOscillator();
       const osc2 = audioCtx.createOscillator();
       const gain = audioCtx.createGain();
-      osc1.type = 'sine';
-      osc1.frequency.setValueAtTime(40, now);
-      osc1.frequency.exponentialRampToValueAtTime(60, now + 0.3);
-      osc2.type = 'sine';
-      osc2.frequency.setValueAtTime(80, now);
-      osc2.frequency.exponentialRampToValueAtTime(120, now + 0.25);
-      gain.gain.setValueAtTime(0.25, now);
-      gain.gain.exponentialRampToValueAtTime(0.001, now + 0.4);
+
+      osc1.type = 'triangle';
+      osc1.frequency.setValueAtTime(f1, now);
+      osc1.frequency.exponentialRampToValueAtTime(f1End, now + dur);
+
+      osc2.type = 'triangle';
+      osc2.frequency.setValueAtTime(f2, now);
+      osc2.frequency.exponentialRampToValueAtTime(f2End, now + dur);
+      osc2.detune.value = detune;
+
+      gain.gain.setValueAtTime(0.18, now);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + dur);
+
       osc1.connect(gain);
       osc2.connect(gain);
       gain.connect(audioCtx.destination);
+
+      // Dreamy delay echo
+      const delay = audioCtx.createDelay();
+      const delayGain = audioCtx.createGain();
+      delay.delayTime.value = 0.1 + t * 0.1;
+      delayGain.gain.value = 0.12 + t * 0.08;
+      gain.connect(delay);
+      delay.connect(delayGain);
+      delayGain.connect(audioCtx.destination);
+
       osc1.start(now);
       osc2.start(now);
-      osc1.stop(now + 0.4);
-      osc2.stop(now + 0.4);
+      osc1.stop(now + dur + 0.3);
+      osc2.stop(now + dur + 0.3);
     }
 
     // Background music — pre-decode into AudioBuffer for instant playback
