@@ -273,39 +273,92 @@
     const COL = '#fff';
     const COL_DIM = '#888';
 
-    // Audio — cycling chime catch sounds via Web Audio API
+    // Audio — synthesized deep-space pings via Web Audio API
     const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-    const CHIME_FREQS = [369.99, 440.00, 293.66]; // F#4 → A4 → D4
-    let chimeIndex = 0;
-    function playCatchSound() {
+
+    // SFX gain (master volume for catch sounds, controlled by mute toggle)
+    const sfxGain = audioCtx.createGain();
+    sfxGain.connect(audioCtx.destination);
+
+    // Synthetic impulse response for convolution reverb (0.6s exponential decay)
+    const irLength = Math.floor(audioCtx.sampleRate * 0.6);
+    const irBuffer = audioCtx.createBuffer(1, irLength, audioCtx.sampleRate);
+    const irData = irBuffer.getChannelData(0);
+    for (let i = 0; i < irLength; i++) {
+      irData[i] = (Math.random() * 2 - 1) * Math.exp(-i / (irLength * 0.15));
+    }
+
+    // Persistent convolver + dry/wet routing
+    const convolverNode = audioCtx.createConvolver();
+    convolverNode.buffer = irBuffer;
+    const catchDryGain = audioCtx.createGain();
+    catchDryGain.gain.value = 0.7;
+    const catchWetGain = audioCtx.createGain();
+    catchWetGain.gain.value = 0.3;
+    catchDryGain.connect(sfxGain);
+    convolverNode.connect(catchWetGain);
+    catchWetGain.connect(sfxGain);
+
+    // Per-size frequencies (D major triad)
+    const CATCH_TONES = [
+      { freq: 1174.66, harmonic: 2349.32, gain: 0.12, decay: 0.03 }, // tiny  (D6)
+      { freq: 739.99,  harmonic: 1479.98, gain: 0.18, decay: 0.05 }, // small (F#5)
+      { freq: 440.00,  harmonic: 880.00,  gain: 0.22, decay: 0.08 }, // medium (A4)
+    ];
+
+    // Combo tracking
+    let lastCatchTime = 0;
+    let catchCombo = 0;
+    const COMBO_WINDOW = 1.2; // seconds
+    const MAX_COMBO = 12;
+
+    function playCatchSound(sizeIndex) {
       const now = audioCtx.currentTime;
-      const freq = CHIME_FREQS[chimeIndex];
-      chimeIndex = (chimeIndex + 1) % CHIME_FREQS.length;
+      // Update combo
+      if (now - lastCatchTime < COMBO_WINDOW) {
+        catchCombo = Math.min(catchCombo + 1, MAX_COMBO);
+      } else {
+        catchCombo = 0;
+      }
+      lastCatchTime = now;
 
-      // Fundamental
+      const t = catchCombo / MAX_COMBO; // 0..1 combo factor
+
+      // Dynamic wet/dry mix
+      catchDryGain.gain.setValueAtTime(0.7 - 0.35 * t, now);
+      catchWetGain.gain.setValueAtTime(0.3 + 0.35 * t, now);
+
+      const tone = CATCH_TONES[sizeIndex] || CATCH_TONES[1];
+      const decayTime = tone.decay * (1 + 1.5 * t); // stretch up to 2.5x
+      const detune = catchCombo > 4 ? (Math.random() - 0.5) * 15 * t : 0; // chorus shimmer
+
+      // Fundamental oscillator
       const osc1 = audioCtx.createOscillator();
-      const gain1 = audioCtx.createGain();
       osc1.type = 'sine';
-      osc1.frequency.value = freq;
-      gain1.gain.setValueAtTime(0.18, now);
-      gain1.gain.exponentialRampToValueAtTime(0.001, now + 0.4);
-      osc1.connect(gain1);
-      gain1.connect(audioCtx.destination);
-
-      // Overtone (3× frequency for bell character)
-      const osc2 = audioCtx.createOscillator();
-      const gain2 = audioCtx.createGain();
-      osc2.type = 'sine';
-      osc2.frequency.value = freq * 3;
-      gain2.gain.setValueAtTime(0.06, now);
-      gain2.gain.exponentialRampToValueAtTime(0.001, now + 0.24);
-      osc2.connect(gain2);
-      gain2.connect(audioCtx.destination);
-
+      osc1.frequency.value = tone.freq;
+      osc1.detune.value = detune;
+      const g1 = audioCtx.createGain();
+      g1.gain.setValueAtTime(tone.gain, now);
+      g1.gain.exponentialRampToValueAtTime(0.001, now + decayTime);
+      osc1.connect(g1);
+      g1.connect(catchDryGain);
+      g1.connect(convolverNode);
       osc1.start(now);
+      osc1.stop(now + decayTime + 0.05);
+
+      // Octave harmonic
+      const osc2 = audioCtx.createOscillator();
+      osc2.type = 'sine';
+      osc2.frequency.value = tone.harmonic;
+      osc2.detune.value = -detune;
+      const g2 = audioCtx.createGain();
+      g2.gain.setValueAtTime(tone.gain * 0.5, now);
+      g2.gain.exponentialRampToValueAtTime(0.001, now + decayTime * 0.8);
+      osc2.connect(g2);
+      g2.connect(catchDryGain);
+      g2.connect(convolverNode);
       osc2.start(now);
-      osc1.stop(now + 0.4);
-      osc2.stop(now + 0.24);
+      osc2.stop(now + decayTime * 0.8 + 0.05);
     }
 
     // Background music — Web Audio API (works in Capacitor WKWebView)
@@ -341,6 +394,7 @@
       }
       musicMuted = !musicMuted;
       musicGain.gain.value = musicMuted ? 0 : 1;
+      sfxGain.gain.value = musicMuted ? 0 : 1;
       muteToggle.textContent = musicMuted ? 'SOUND OFF' : 'SOUND ON';
     });
 
@@ -540,7 +594,8 @@
       const type = STAR_TYPES[typeName];
       // Pick random size: ~30% tiny, ~45% small, ~25% medium
       const sizeRoll = Math.random();
-      const size = sizeRoll < 0.30 ? STAR_SIZES[0] : sizeRoll < 0.75 ? STAR_SIZES[1] : STAR_SIZES[2];
+      const sizeIndex = sizeRoll < 0.30 ? 0 : sizeRoll < 0.75 ? 1 : 2;
+      const size = STAR_SIZES[sizeIndex];
       const maxDrift = Math.floor(game.spawnInterval * game.player.speed);
       const lastX = game.lastStarX;
       const minX = Math.max(4, lastX - maxDrift);
@@ -556,6 +611,7 @@
         catchW: Math.round(type.catchW * size.catchScale),
         catchH: Math.round(type.catchH * size.catchScale),
         sprites: size.sprites,
+        sizeIndex: sizeIndex,
       });
     }
 
@@ -602,7 +658,7 @@
         const sy = s.y + 2;
         if (Math.abs(sx - px) < s.catchW && Math.abs(sy - py) < s.catchH) {
           game.caught++;
-          playCatchSound();
+          playCatchSound(s.sizeIndex);
 
           for (let j = 0; j < 8; j++) {
             game.particles.push(new Particle(sx, sy));
@@ -806,6 +862,11 @@
     function startGame() {
       if (audioCtx.state === 'suspended') audioCtx.resume();
       startMusic();
+      // Reset catch combo and reverb mix
+      lastCatchTime = 0;
+      catchCombo = 0;
+      catchDryGain.gain.value = 0.7;
+      catchWetGain.gain.value = 0.3;
       overlay.classList.add('hidden');
       muteToggle.classList.add('hidden');
       game = initGame();
