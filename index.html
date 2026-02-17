@@ -336,7 +336,7 @@
     let musicBuffer = null;
     let musicSource = null;
     let musicGain = audioCtx.createGain();
-    musicGain.gain.value = 4;
+    musicGain.gain.value = 5;
     musicGain.connect(audioCtx.destination);
     let musicStarted = false;
     let musicMuted = false;
@@ -371,7 +371,7 @@
         return;
       }
       musicMuted = !musicMuted;
-      musicGain.gain.value = musicMuted ? 0 : 4;
+      musicGain.gain.value = musicMuted ? 0 : 5;
       muteToggle.textContent = musicMuted ? 'SOUND OFF' : 'SOUND ON';
     });
 
