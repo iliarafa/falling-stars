@@ -750,6 +750,7 @@
         time: 0,
         gameOver: false,
         lastStarX: Math.floor(W / 2),
+        lastStarSlow: false,
         spaceMode: false,
         spaceTransition: 0,
         planets: [],
@@ -768,7 +769,10 @@
       const fastChance = d > 1.2 ? Math.min(0.25, 0.05 + 0.08 * (d - 1.2)) : 0;
       const slowChance = 0.25;
       const roll = Math.random();
-      const typeName = roll < fastChance ? 'fast' : roll < fastChance + slowChance ? 'slow' : 'normal';
+      const canBeSlow = !game.lastStarSlow;
+      const typeName = roll < fastChance ? 'fast'
+        : (canBeSlow && roll < fastChance + slowChance) ? 'slow' : 'normal';
+      game.lastStarSlow = (typeName === 'slow');
       const type = STAR_TYPES[typeName];
       // Pick random size: ~30% tiny, ~45% small, ~25% medium
       const sizeRoll = Math.random();
@@ -810,7 +814,7 @@
         x = Math.floor(Math.random() * (maxX - minX)) + minX;
         game.lastStarX = x; // keep for compatibility
         y = size.spawnY;
-        speed = Math.min((Math.random() * 0.3 + 0.2) * type.speedMult * d, 1.2);
+        speed = Math.max(0.35, Math.min((Math.random() * 0.3 + 0.2) * type.speedMult * d, 1.2));
       }
 
       game.stars.push({
