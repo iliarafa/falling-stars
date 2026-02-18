@@ -269,11 +269,21 @@
 
     // Safe-area offset for HUD (avoids status bar on iPad/notch devices)
     const satEl = document.createElement('div');
+    satEl.style.position = 'fixed';
+    satEl.style.top = '0';
+    satEl.style.left = '0';
+    satEl.style.width = '1px';
     satEl.style.height = 'env(safe-area-inset-top, 0px)';
     document.body.appendChild(satEl);
+    // Force layout so the env() value resolves
+    satEl.offsetHeight;
     const safeTopPx = satEl.getBoundingClientRect().height;
     document.body.removeChild(satEl);
-    const HUD_Y = Math.ceil(safeTopPx * H / cssH);
+    // Fallback: if env() reported 0 but we're in a Capacitor webview, assume
+    // a minimum status-bar inset (20pt standard, 59pt dynamic island).
+    const isCapacitor = window.Capacitor && window.Capacitor.isNativePlatform();
+    const effectiveSafe = (safeTopPx > 0 || !isCapacitor) ? safeTopPx : 20;
+    const HUD_Y = Math.ceil(effectiveSafe * H / cssH);
 
     // Low-res offscreen canvas
     const offCanvas = document.createElement('canvas');
@@ -770,12 +780,33 @@
         y = -5 - Math.floor(Math.random() * 10);
         speed = Math.random() * 0.4 + 0.5; // steady flight speed
       } else {
-        const maxDrift = Math.floor(game.spawnInterval * game.player.speed);
-        const lastX = game.lastStarX;
-        const minX = Math.max(4, lastX - maxDrift);
-        const maxX = Math.min(W - 8, lastX + maxDrift);
+        const playerY = game.player.y + 4;
+        const playerCx = game.player.x + 5;
+        const pSpeed = game.player.speed;
+
+        // Anchor to the soonest-arriving on-screen star
+        let anchorX = playerCx;
+        let anchorFrames = 0;
+        for (const s of game.stars) {
+          if (s.y < playerY) {
+            const framesLeft = (playerY - s.y) / s.speed;
+            if (anchorFrames === 0 || framesLeft < anchorFrames) {
+              anchorFrames = framesLeft;
+              anchorX = s.x + 2;
+            }
+          }
+        }
+
+        // Reachable range based on available movement time
+        const estSpeed = Math.min(0.35 * type.speedMult * d, 1.2);
+        const fallFrames = (playerY - size.spawnY) / estSpeed;
+        const availFrames = Math.max(0, fallFrames - anchorFrames);
+        const range = Math.max(15, Math.floor(availFrames * pSpeed * 0.75));
+
+        const minX = Math.max(4, anchorX - range);
+        const maxX = Math.min(W - 8, anchorX + range);
         x = Math.floor(Math.random() * (maxX - minX)) + minX;
-        game.lastStarX = x;
+        game.lastStarX = x; // keep for compatibility
         y = size.spawnY;
         speed = Math.min((Math.random() * 0.3 + 0.2) * type.speedMult * d, 1.2);
       }
