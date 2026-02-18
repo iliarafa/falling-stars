@@ -282,6 +282,8 @@
     // Fallback: if env() reported 0 but we're in a Capacitor webview, assume
     // a minimum status-bar inset (20pt standard, 59pt dynamic island).
     const isCapacitor = window.Capacitor && window.Capacitor.isNativePlatform();
+    const isIPad = /iPad/i.test(navigator.userAgent) ||
+      (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
     const effectiveSafe = (safeTopPx > 0 || !isCapacitor) ? safeTopPx : 20;
     const HUD_Y = Math.ceil(effectiveSafe * H / cssH);
 
@@ -736,7 +738,7 @@
 
     function initGame() {
       return {
-        player: { x: Math.floor(W / 2) - 5, y: H - 17, w: 11, h: 12, speed: 1.5, dir: 0 },
+        player: { x: Math.floor(W / 2) - 5, y: H - 17, w: 11, h: 12, speed: 2.0, dir: 0 },
         stars: [],
         particles: [],
         caught: 0,
@@ -992,8 +994,8 @@
 
           game.stars.splice(i, 1);
 
-          // Trigger space mode at 50 catches
-          if (game.caught === 50 && !game.spaceMode) {
+          // Trigger space mode at 44 catches
+          if (game.caught === 44 && !game.spaceMode) {
             game.spaceMode = true;
             game.spaceTransition = 30; // ~0.5 second flash transition
             switchMusic(spaceBuffer);
@@ -1234,13 +1236,13 @@
       }
 
       // HUD - Stars (top left)
-      drawText(`STARS ${game.caught}`, 2, 5 + HUD_Y, COL);
+      drawText(`STARS ${game.caught}`, 2, isIPad ? 5 + HUD_Y : 2, COL);
 
       // HUD - Lives (top right, as small star sprites)
       const remaining = game.maxMissed - game.missed;
       for (let i = 0; i < game.maxMissed; i++) {
         off.globalAlpha = i < remaining ? 1 : 0.2;
-        drawSprite(LIFE_SPRITE, W - 5 - i * 5, 6 + HUD_Y, COL);
+        drawSprite(LIFE_SPRITE, W - 5 - i * 5, isIPad ? 6 + HUD_Y : 3, COL);
       }
       off.globalAlpha = 1;
 
@@ -1392,6 +1394,7 @@
     startBtn.addEventListener('click', startGame);
 
     document.getElementById('wishBtn').addEventListener('click', () => {
+      if (musicBuffer) switchMusic(musicBuffer);
       showStep('stepWish');
       wishInput.value = '';
       wishInput.focus();
