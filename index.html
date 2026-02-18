@@ -7,6 +7,7 @@
   <link rel="apple-touch-icon" href="apple-touch-icon.png">
   <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
   <style>
+    :root { --sat: env(safe-area-inset-top, 0px); }
     * { margin: 0; padding: 0; box-sizing: border-box; }
     body {
       background: #000;
@@ -265,6 +266,14 @@
     canvas.height = Math.round(cssH * DPR);
     canvas.style.width = cssW + 'px';
     canvas.style.height = cssH + 'px';
+
+    // Safe-area offset for HUD (avoids status bar on iPad/notch devices)
+    const satEl = document.createElement('div');
+    satEl.style.height = 'env(safe-area-inset-top, 0px)';
+    document.body.appendChild(satEl);
+    const safeTopPx = satEl.getBoundingClientRect().height;
+    document.body.removeChild(satEl);
+    const HUD_Y = Math.ceil(safeTopPx * H / cssH);
 
     // Low-res offscreen canvas
     const offCanvas = document.createElement('canvas');
@@ -1194,13 +1203,13 @@
       }
 
       // HUD - Stars (top left)
-      drawText(`STARS ${game.caught}`, 2, 2, COL);
+      drawText(`STARS ${game.caught}`, 2, 2 + HUD_Y, COL);
 
       // HUD - Lives (top right, as small star sprites)
       const remaining = game.maxMissed - game.missed;
       for (let i = 0; i < game.maxMissed; i++) {
         off.globalAlpha = i < remaining ? 1 : 0.2;
-        drawSprite(LIFE_SPRITE, W - 5 - i * 5, 3, COL);
+        drawSprite(LIFE_SPRITE, W - 5 - i * 5, 3 + HUD_Y, COL);
       }
       off.globalAlpha = 1;
 
