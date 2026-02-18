@@ -1234,13 +1234,13 @@
       }
 
       // HUD - Stars (top left)
-      drawText(`STARS ${game.caught}`, 2, 2 + HUD_Y, COL);
+      drawText(`STARS ${game.caught}`, 2, 5 + HUD_Y, COL);
 
       // HUD - Lives (top right, as small star sprites)
       const remaining = game.maxMissed - game.missed;
       for (let i = 0; i < game.maxMissed; i++) {
         off.globalAlpha = i < remaining ? 1 : 0.2;
-        drawSprite(LIFE_SPRITE, W - 5 - i * 5, 3 + HUD_Y, COL);
+        drawSprite(LIFE_SPRITE, W - 5 - i * 5, 6 + HUD_Y, COL);
       }
       off.globalAlpha = 1;
 
