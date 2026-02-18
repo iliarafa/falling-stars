@@ -373,20 +373,43 @@
     let musicStarted = false;
     let musicMuted = false;
 
-    // Preload music into an AudioBuffer
+    // Preload music into AudioBuffers
     fetch('stars.mp3')
       .then(r => r.arrayBuffer())
       .then(buf => audioCtx.decodeAudioData(buf))
       .then(decoded => { musicBuffer = decoded; });
 
-    function startMusic() {
-      if (musicStarted || !musicBuffer) return;
+    let spaceBuffer = null;
+    fetch('comets.mp3')
+      .then(r => r.arrayBuffer())
+      .then(buf => audioCtx.decodeAudioData(buf))
+      .then(decoded => { spaceBuffer = decoded; });
+
+    // Subtle white noise buffer for overlay screens (2 seconds, looped)
+    const noiseLength = audioCtx.sampleRate * 2;
+    const noiseBuffer = audioCtx.createBuffer(1, noiseLength, audioCtx.sampleRate);
+    const noiseData = noiseBuffer.getChannelData(0);
+    for (let i = 0; i < noiseLength; i++) {
+      noiseData[i] = (Math.random() * 2 - 1) * 0.06;
+    }
+
+    function switchMusic(buffer) {
+      if (!buffer) return;
+      if (musicSource) {
+        musicSource.stop();
+        musicSource.disconnect();
+      }
       musicSource = audioCtx.createBufferSource();
-      musicSource.buffer = musicBuffer;
+      musicSource.buffer = buffer;
       musicSource.loop = true;
       musicSource.connect(musicGain);
       musicSource.start();
       musicStarted = true;
+    }
+
+    function startMusic() {
+      if (musicStarted || !musicBuffer) return;
+      switchMusic(musicBuffer);
     }
 
     muteToggle.addEventListener('click', () => {
@@ -420,6 +443,7 @@
     // Input
     const keys = {};
     let touchX = null;
+    let touchY = null;
 
     window.addEventListener('keydown', e => { keys[e.key] = true; });
     window.addEventListener('keyup', e => { keys[e.key] = false; });
@@ -428,13 +452,15 @@
       e.preventDefault();
       const rect = canvas.getBoundingClientRect();
       touchX = (e.touches[0].clientX - rect.left) / rect.width * W;
+      touchY = (e.touches[0].clientY - rect.top) / rect.height * H;
     });
     canvas.addEventListener('touchmove', e => {
       e.preventDefault();
       const rect = canvas.getBoundingClientRect();
       touchX = (e.touches[0].clientX - rect.left) / rect.width * W;
+      touchY = (e.touches[0].clientY - rect.top) / rect.height * H;
     });
-    canvas.addEventListener('touchend', () => { touchX = null; });
+    canvas.addEventListener('touchend', () => { touchX = null; touchY = null; });
 
     // Pixel art sprites
 
@@ -479,6 +505,70 @@
       [0,1,0],
     ];
 
+    // Planet obstacle sprites — multi-shade: 1=body, 2=highlight, 3=shadow
+    const PLANET_SPRITE_SMALL = [
+      [0,2,2,2,0],
+      [2,2,2,1,1],
+      [2,2,1,1,3],
+      [1,1,1,3,3],
+      [0,3,3,3,0],
+    ];
+    const PLANET_SPRITE_MEDIUM = [
+      [0,0,2,2,2,0,0],
+      [0,2,2,2,1,1,0],
+      [2,2,2,1,1,1,3],
+      [2,2,1,1,1,3,3],
+      [2,1,1,1,3,3,3],
+      [0,1,1,3,3,3,0],
+      [0,0,3,3,3,0,0],
+    ];
+    const PLANET_SPRITE_LARGE = [
+      [0,0,0,2,2,2,0,0,0],
+      [0,0,2,2,2,1,1,0,0],
+      [0,2,2,2,1,1,1,1,0],
+      [2,2,2,1,1,1,1,3,3],
+      [2,2,1,1,1,1,3,3,3],
+      [2,1,1,1,1,3,3,3,3],
+      [0,1,1,1,3,3,3,3,0],
+      [0,0,1,3,3,3,3,0,0],
+      [0,0,0,3,3,3,0,0,0],
+    ];
+    // [body, highlight, shadow]
+    const PLANET_PALETTES = [
+      ['#c44','#f77','#822'], // red
+      ['#cc4','#ff7','#882'], // yellow
+      ['#a4c','#d7f','#628'], // purple
+      ['#44c','#77f','#228'], // blue
+      ['#c84','#fb7','#842'], // orange
+      ['#4c4','#7f7','#282'], // green
+    ];
+    const PLANET_SPRITE_XLARGE = [
+      [0,0,0,0,2,2,2,2,0,0,0,0],
+      [0,0,0,2,2,2,2,1,1,0,0,0],
+      [0,0,2,2,2,2,1,1,1,1,0,0],
+      [0,2,2,2,2,1,1,1,1,1,3,0],
+      [2,2,2,2,1,1,1,1,1,3,3,3],
+      [2,2,2,1,1,1,1,1,3,3,3,3],
+      [2,2,1,1,1,1,1,3,3,3,3,3],
+      [2,1,1,1,1,1,3,3,3,3,3,3],
+      [0,1,1,1,1,3,3,3,3,3,3,0],
+      [0,0,1,1,3,3,3,3,3,3,0,0],
+      [0,0,0,3,3,3,3,3,3,0,0,0],
+      [0,0,0,0,3,3,3,3,0,0,0,0],
+    ];
+    const PLANET_SIZES = [
+      { sprite: PLANET_SPRITE_SMALL, w: 5, h: 5, center: 2 },
+      { sprite: PLANET_SPRITE_MEDIUM, w: 7, h: 7, center: 3 },
+      { sprite: PLANET_SPRITE_LARGE, w: 9, h: 9, center: 4 },
+      { sprite: PLANET_SPRITE_XLARGE, w: 12, h: 12, center: 6 },
+    ];
+
+    const DEBRIS_SPRITE = [
+      [0,2,0],
+      [1,1,3],
+      [0,3,0],
+    ];
+
     // Bitmap pixel font (3×5, no anti-aliasing)
     // Each row is a 3-bit mask: bit2=left, bit1=center, bit0=right
     const FONT = {
@@ -519,7 +609,7 @@
 
     // Size definitions: sprites, hitbox scale, spawn y-offset
     const STAR_SIZES = [
-      { sprites: STAR_SPRITE_SETS[0], catchScale: 0.5, spawnY: -3 }, // tiny
+      { sprites: STAR_SPRITE_SETS[0], catchScale: 0.7, spawnY: -3 }, // tiny
       { sprites: STAR_SPRITE_SETS[1], catchScale: 0.7, spawnY: -4 }, // small
       { sprites: STAR_SPRITE_SETS[2], catchScale: 1.0, spawnY: -6 }, // medium
     ];
@@ -531,6 +621,21 @@
       for (let r = 0; r < sprite.length; r++) {
         for (let c = 0; c < sprite[r].length; c++) {
           if (sprite[r][c]) {
+            off.fillRect(sx + c, sy + r, 1, 1);
+          }
+        }
+      }
+    }
+
+    // Multi-shade sprite: cell 1/2/3 maps to palette[0]/[1]/[2], 0 = transparent
+    function drawColorSprite(sprite, x, y, palette) {
+      const sx = Math.floor(x);
+      const sy = Math.floor(y);
+      for (let r = 0; r < sprite.length; r++) {
+        for (let c = 0; c < sprite[r].length; c++) {
+          const v = sprite[r][c];
+          if (v) {
+            off.fillStyle = palette[v - 1];
             off.fillRect(sx + c, sy + r, 1, 1);
           }
         }
@@ -571,6 +676,40 @@
       }
     }
 
+    // Comet sprite (5x5 head) — 1=deep yellow, 2=bright yellow, 3=red-orange
+    const COMET_SPRITE = [
+      [0,0,2,0,0],
+      [0,2,2,2,0],
+      [1,2,2,2,1],
+      [0,1,1,1,0],
+      [0,0,3,0,0],
+    ];
+    const COMET_PALETTE = ['#da3','#ff6','#e52'];
+
+    // Trail particle for comets — no gravity, warm colors, faster decay
+    class CometTrailParticle {
+      constructor(x, y) {
+        this.x = x;
+        this.y = y;
+        this.vx = (Math.random() - 0.5) * 0.3;
+        this.vy = (Math.random() - 0.5) * 0.3;
+        this.life = 1;
+        this.decay = Math.random() * 0.06 + 0.04;
+        this.color = Math.random() < 0.5 ? '#da3' : '#e52';
+      }
+      update() {
+        this.x += this.vx;
+        this.y += this.vy;
+        this.life -= this.decay;
+      }
+      draw() {
+        off.globalAlpha = this.life;
+        off.fillStyle = this.color;
+        off.fillRect(Math.floor(this.x), Math.floor(this.y), 1, 1);
+        off.globalAlpha = 1;
+      }
+    }
+
     function initGame() {
       return {
         player: { x: Math.floor(W / 2) - 5, y: H - 17, w: 11, h: 12, speed: 1.5, dir: 0 },
@@ -585,6 +724,16 @@
         time: 0,
         gameOver: false,
         lastStarX: Math.floor(W / 2),
+        spaceMode: false,
+        spaceTransition: 0,
+        planets: [],
+        planetTimer: 0,
+        planetInterval: 90,
+        comets: [],
+        cometTimer: 0,
+        cometInterval: 150,
+        cometTrailParticles: [],
+        debris: [],
       };
     }
 
@@ -599,16 +748,28 @@
       const sizeRoll = Math.random();
       const sizeIndex = sizeRoll < 0.30 ? 0 : sizeRoll < 0.75 ? 1 : 2;
       const size = STAR_SIZES[sizeIndex];
-      const maxDrift = Math.floor(game.spawnInterval * game.player.speed);
-      const lastX = game.lastStarX;
-      const minX = Math.max(4, lastX - maxDrift);
-      const maxX = Math.min(W - 8, lastX + maxDrift);
-      const x = Math.floor(Math.random() * (maxX - minX)) + minX;
-      game.lastStarX = x;
+
+      let x, y, speed;
+      if (game.spaceMode) {
+        // Space mode: stars spawn above screen at random X across full width
+        x = Math.floor(Math.random() * (W - 8)) + 4;
+        y = -5 - Math.floor(Math.random() * 10);
+        speed = Math.random() * 0.4 + 0.5; // steady flight speed
+      } else {
+        const maxDrift = Math.floor(game.spawnInterval * game.player.speed);
+        const lastX = game.lastStarX;
+        const minX = Math.max(4, lastX - maxDrift);
+        const maxX = Math.min(W - 8, lastX + maxDrift);
+        x = Math.floor(Math.random() * (maxX - minX)) + minX;
+        game.lastStarX = x;
+        y = size.spawnY;
+        speed = Math.min((Math.random() * 0.3 + 0.2) * type.speedMult * d, 1.2);
+      }
+
       game.stars.push({
         x: x,
-        y: size.spawnY,
-        speed: Math.min((Math.random() * 0.3 + 0.2) * type.speedMult * d, 1.2),
+        y: y,
+        speed: speed,
         type: typeName,
         color: type.color,
         catchW: Math.round(type.catchW * size.catchScale),
@@ -618,13 +779,81 @@
       });
     }
 
+    function spawnPlanet() {
+      // Pick random size: 30% small, 30% medium, 25% large, 15% xlarge
+      const sizeRoll = Math.random();
+      const sizeIdx = sizeRoll < 0.30 ? 0 : sizeRoll < 0.60 ? 1 : sizeRoll < 0.85 ? 2 : 3;
+      const size = PLANET_SIZES[sizeIdx];
+      const palette = PLANET_PALETTES[Math.floor(Math.random() * PLANET_PALETTES.length)];
+      game.planets.push({
+        x: Math.floor(Math.random() * (W - size.w)),
+        y: -size.h - 1,
+        speed: Math.random() * 0.3 + 0.4,
+        sprite: size.sprite,
+        w: size.w,
+        h: size.h,
+        center: size.center,
+        palette: palette,
+      });
+      // Jitter next spawn interval (55-100 frames)
+      game.planetInterval = 55 + Math.floor(Math.random() * 45);
+    }
+
+    function spawnComet() {
+      const fromLeft = Math.random() < 0.5;
+      const x = fromLeft ? -5 : W + 1;
+      const y = Math.random() * (H * 0.3);
+      const angleDeg = 25 + Math.random() * 40; // 25-65° range — includes steep diagonals
+      const angleRad = angleDeg * Math.PI / 180;
+      const totalSpeed = Math.random() * 0.5 + 0.8; // 0.8-1.3
+      const vx = Math.cos(angleRad) * totalSpeed * (fromLeft ? 1 : -1);
+      const vy = Math.sin(angleRad) * totalSpeed;
+      game.comets.push({
+        x: x,
+        y: y,
+        vx: vx,
+        vy: vy,
+        trailTimer: 0,
+      });
+      // Jitter next spawn interval
+      const intense = game.caught >= 150;
+      game.cometInterval = intense
+        ? 45 + Math.floor(Math.random() * 40)   // 45-85 frames
+        : 90 + Math.floor(Math.random() * 70);  // 90-160 frames
+    }
+
+    function spawnDebris(x, y, palette, count, baseVx, baseVy) {
+      for (let i = 0; i < count; i++) {
+        const angle = Math.random() * Math.PI * 2;
+        const speed = Math.random() * 0.5 + 0.3;
+        game.debris.push({
+          x: x,
+          y: y,
+          vx: baseVx * 0.3 + Math.cos(angle) * speed,
+          vy: baseVy * 0.3 + Math.sin(angle) * speed,
+          palette: palette,
+          life: 1.0,
+          decay: 0.008 + Math.random() * 0.004,
+        });
+      }
+    }
+
     function update() {
       if (game.gameOver) return;
       game.time++;
 
+      // Space mode transition countdown (no freeze — game keeps running)
+      if (game.spaceTransition > 0) {
+        game.spaceTransition--;
+      }
+
       const timeSec = game.time / 60;
       game.difficulty = 1 + 0.8 / (1 + Math.exp(-(timeSec - 60) / 20));
-      game.spawnInterval = 25 + 55 / (1 + Math.exp((timeSec - 75) / 20));
+      if (game.spaceMode) {
+        game.spawnInterval = 18; // faster, steady stream of stars
+      } else {
+        game.spawnInterval = 25 + 55 / (1 + Math.exp((timeSec - 75) / 20));
+      }
 
       game.spawnTimer++;
       if (game.spawnTimer >= game.spawnInterval) {
@@ -632,22 +861,71 @@
         spawnStar();
       }
 
+      // Spawn planets in space mode
+      if (game.spaceMode && game.caught >= 75) {
+        game.planetTimer++;
+        if (game.planetTimer >= game.planetInterval) {
+          game.planetTimer = 0;
+          spawnPlanet();
+        }
+      }
+
+      // Spawn comets in space mode after 75 catches
+      if (game.spaceMode && game.caught >= 75) {
+        game.cometTimer++;
+        const intense = game.caught >= 150;
+        if (game.cometTimer >= game.cometInterval) {
+          game.cometTimer = 0;
+          spawnComet();
+          if (intense && Math.random() < 0.3) spawnComet();
+        }
+      }
+
       // Player movement
       const p = game.player;
       let moving = false;
+      const prevPx = p.x;
+      const prevPy = p.y;
 
-      if (touchX !== null) {
-        const target = touchX - p.w / 2;
-        const diff = target - p.x;
-        p.x += Math.sign(diff) * Math.min(Math.abs(diff), p.speed + 0.5);
-        p.dir = Math.sign(diff) || p.dir;
-        moving = true;
+      if (game.spaceMode) {
+        // Space mode: free 2D movement
+        if (touchX !== null && touchY !== null) {
+          const targetX = touchX - p.w / 2;
+          const targetY = touchY - p.h / 2;
+          const diffX = targetX - p.x;
+          const diffY = targetY - p.y;
+          p.x += Math.sign(diffX) * Math.min(Math.abs(diffX), p.speed + 0.5);
+          p.y += Math.sign(diffY) * Math.min(Math.abs(diffY), p.speed + 0.5);
+          p.dir = Math.sign(diffX) || p.dir;
+          moving = true;
+        } else {
+          if (keys['ArrowLeft'] || keys['a']) { p.x -= p.speed; p.dir = -1; moving = true; }
+          if (keys['ArrowRight'] || keys['d']) { p.x += p.speed; p.dir = 1; moving = true; }
+          if (keys['ArrowUp'] || keys['w']) { p.y -= p.speed; moving = true; }
+          if (keys['ArrowDown'] || keys['s']) { p.y += p.speed; moving = true; }
+        }
+        if (!moving) p.dir = 0;
+        p.x = Math.max(0, Math.min(W - p.w, p.x));
+        p.y = Math.max(0, Math.min(H - p.h, p.y));
       } else {
-        if (keys['ArrowLeft'] || keys['a']) { p.x -= p.speed; p.dir = -1; moving = true; }
-        if (keys['ArrowRight'] || keys['d']) { p.x += p.speed; p.dir = 1; moving = true; }
+        // Normal mode: lateral movement only
+        if (touchX !== null) {
+          const target = touchX - p.w / 2;
+          const diff = target - p.x;
+          p.x += Math.sign(diff) * Math.min(Math.abs(diff), p.speed + 0.5);
+          p.dir = Math.sign(diff) || p.dir;
+          moving = true;
+        } else {
+          if (keys['ArrowLeft'] || keys['a']) { p.x -= p.speed; p.dir = -1; moving = true; }
+          if (keys['ArrowRight'] || keys['d']) { p.x += p.speed; p.dir = 1; moving = true; }
+        }
+        if (!moving) p.dir = 0;
+        p.x = Math.max(0, Math.min(W - p.w, p.x));
       }
-      if (!moving) p.dir = 0;
-      p.x = Math.max(0, Math.min(W - p.w, p.x));
+
+      // Conveyor belt: player's movement delta (for planets)
+      const playerDx = p.x - prevPx;
+      const playerDy = p.y - prevPy;
 
       // Update stars
       for (let i = game.stars.length - 1; i >= 0; i--) {
@@ -668,15 +946,163 @@
           }
 
           game.stars.splice(i, 1);
+
+          // Trigger space mode at 50 catches
+          if (game.caught === 50 && !game.spaceMode) {
+            game.spaceMode = true;
+            game.spaceTransition = 30; // ~0.5 second flash transition
+            switchMusic(spaceBuffer);
+          }
           continue;
         }
 
         if (s.y > H + 6) {
           game.stars.splice(i, 1);
+          if (!game.spaceMode) {
+            game.missed++;
+            if (game.missed >= game.maxMissed) {
+              game.gameOver = true;
+            }
+          }
+        }
+      }
+
+      // Planet-planet collisions
+      const planetsToRemove = new Set();
+      for (let i = 0; i < game.planets.length; i++) {
+        for (let j = i + 1; j < game.planets.length; j++) {
+          const a = game.planets[i];
+          const b = game.planets[j];
+          if (a.x < b.x + b.w && a.x + a.w > b.x &&
+              a.y < b.y + b.h && a.y + a.h > b.y) {
+            planetsToRemove.add(i);
+            planetsToRemove.add(j);
+            const midX = (a.x + a.center + b.x + b.center) / 2;
+            const midY = (a.y + a.center + b.y + b.center) / 2;
+            const countA = a.w <= 5 ? 2 : a.w <= 7 ? 3 : 4;
+            const countB = b.w <= 5 ? 2 : b.w <= 7 ? 3 : 4;
+            const conveyorVx = -playerDx * 1.2;
+            const conveyorVy = 1.0;
+            spawnDebris(a.x + a.center, a.y + a.center, a.palette, countA, conveyorVx, conveyorVy);
+            spawnDebris(b.x + b.center, b.y + b.center, b.palette, countB, conveyorVx, conveyorVy);
+            for (let k = 0; k < 12; k++) {
+              game.particles.push(new Particle(midX, midY));
+            }
+          }
+        }
+      }
+      if (planetsToRemove.size > 0) {
+        const sorted = [...planetsToRemove].sort((a, b) => b - a);
+        for (const idx of sorted) game.planets.splice(idx, 1);
+      }
+
+      // Update planets (space mode obstacles)
+      for (let i = game.planets.length - 1; i >= 0; i--) {
+        const pl = game.planets[i];
+        pl.y += pl.speed;
+
+        // AABB collision: player rect vs planet rect (size-aware)
+        const p = game.player;
+        if (pl.x < p.x + p.w && pl.x + pl.w > p.x &&
+            pl.y < p.y + p.h && pl.y + pl.h > p.y) {
+          game.planets.splice(i, 1);
           game.missed++;
+          // Burst particles at planet center
+          for (let j = 0; j < 10; j++) {
+            game.particles.push(new Particle(pl.x + pl.center, pl.y + pl.center));
+          }
           if (game.missed >= game.maxMissed) {
             game.gameOver = true;
           }
+          continue;
+        }
+
+        // Off-screen: remove
+        if (pl.y > H + 8) {
+          game.planets.splice(i, 1);
+        }
+      }
+
+      // Update comets (space mode, after 100 catches)
+      for (let i = game.comets.length - 1; i >= 0; i--) {
+        const cm = game.comets[i];
+        cm.x += cm.vx;
+        cm.y += cm.vy;
+        // Emit trail particles every 2 frames
+        cm.trailTimer++;
+        if (cm.trailTimer >= 2) {
+          cm.trailTimer = 0;
+          game.cometTrailParticles.push(new CometTrailParticle(cm.x + 2, cm.y + 3));
+        }
+        // Comet-planet collision (shatters planet into debris)
+        let cometHitPlanet = false;
+        for (let j = game.planets.length - 1; j >= 0; j--) {
+          const pl = game.planets[j];
+          if (cm.x < pl.x + pl.w && cm.x + 5 > pl.x &&
+              cm.y < pl.y + pl.h && cm.y + 5 > pl.y) {
+            const debrisCount = pl.w <= 5 ? 2 : pl.w <= 7 ? 3 : 4;
+            spawnDebris(pl.x + pl.center, pl.y + pl.center, pl.palette, debrisCount, cm.vx, cm.vy);
+            for (let k = 0; k < 10; k++) {
+              game.particles.push(new Particle(pl.x + pl.center, pl.y + pl.center));
+            }
+            game.planets.splice(j, 1);
+            cometHitPlanet = true;
+            break;
+          }
+        }
+        if (cometHitPlanet) {
+          game.comets.splice(i, 1);
+          continue;
+        }
+        // AABB collision with player (costs a life)
+        const p = game.player;
+        if (cm.x < p.x + p.w && cm.x + 5 > p.x &&
+            cm.y < p.y + p.h && cm.y + 5 > p.y) {
+          game.comets.splice(i, 1);
+          game.missed++;
+          for (let j = 0; j < 10; j++) {
+            game.particles.push(new Particle(cm.x + 2, cm.y + 2));
+          }
+          if (game.missed >= game.maxMissed) {
+            game.gameOver = true;
+          }
+          continue;
+        }
+        // Off-screen removal
+        if (cm.x < -10 || cm.x > W + 10 || cm.y > H + 10) {
+          game.comets.splice(i, 1);
+        }
+      }
+
+      // Update comet trail particles
+      for (let i = game.cometTrailParticles.length - 1; i >= 0; i--) {
+        game.cometTrailParticles[i].update();
+        if (game.cometTrailParticles[i].life <= 0) game.cometTrailParticles.splice(i, 1);
+      }
+
+      // Update debris fragments
+      for (let i = game.debris.length - 1; i >= 0; i--) {
+        const d = game.debris[i];
+        d.x += d.vx;
+        d.y += d.vy;
+        d.vy += 0.005;
+        d.life -= d.decay;
+        // AABB collision with player (3×3 vs player rect)
+        const p = game.player;
+        if (d.x < p.x + p.w && d.x + 3 > p.x &&
+            d.y < p.y + p.h && d.y + 3 > p.y) {
+          game.debris.splice(i, 1);
+          game.missed++;
+          for (let j = 0; j < 6; j++) {
+            game.particles.push(new Particle(d.x + 1, d.y + 1));
+          }
+          if (game.missed >= game.maxMissed) {
+            game.gameOver = true;
+          }
+          continue;
+        }
+        if (d.life <= 0 || d.x < -5 || d.x > W + 5 || d.y > H + 5) {
+          game.debris.splice(i, 1);
         }
       }
 
@@ -695,13 +1121,29 @@
 
       // Background twinkling dots
       const t = Date.now() / 1000;
+      const inSpace = game && game.spaceMode;
       for (const d of bgDots) {
-        const alpha = 0.15 + 0.25 * Math.sin(t * d.speed + d.twinkle);
+        // In space mode, scroll dots downward to convey flight
+        if (inSpace) {
+          d.y += d.speed * 0.3;
+          if (d.y > H) { d.y = 0; d.x = Math.floor(Math.random() * W); }
+        }
+        const twinkleSpeed = inSpace ? d.speed * 3 : d.speed;
+        const alpha = 0.15 + 0.25 * Math.sin(t * twinkleSpeed + d.twinkle);
         off.globalAlpha = alpha;
         off.fillStyle = COL;
-        off.fillRect(d.x, d.y, 1, 1);
+        off.fillRect(Math.floor(d.x), Math.floor(d.y), 1, 1);
       }
       off.globalAlpha = 1;
+
+      // Space mode transition: white flash that fades out
+      if (game && game.spaceTransition > 0) {
+        const t = game.spaceTransition / 30; // 1.0 → 0.0
+        off.globalAlpha = t * 0.6; // max 60% white, fading
+        off.fillStyle = '#fff';
+        off.fillRect(0, 0, W, H);
+        off.globalAlpha = 1;
+      }
 
       if (!game) {
         ctx.imageSmoothingEnabled = false;
@@ -716,10 +1158,32 @@
         drawSprite(s.sprites[frame], s.x, s.y, s.color);
       }
 
+      // Comet trail particles (behind solid objects)
+      for (const tp of game.cometTrailParticles) {
+        tp.draw();
+      }
+
+      // Planets (space mode obstacles, multi-shade)
+      for (const pl of game.planets) {
+        drawColorSprite(pl.sprite, pl.x, pl.y, pl.palette);
+      }
+
+      // Comets
+      for (const cm of game.comets) {
+        drawColorSprite(COMET_SPRITE, cm.x, cm.y, COMET_PALETTE);
+      }
+
+      // Debris fragments
+      for (const d of game.debris) {
+        off.globalAlpha = d.life;
+        drawColorSprite(DEBRIS_SPRITE, d.x, d.y, d.palette);
+        off.globalAlpha = 1;
+      }
+
       // Player
       drawSprite(PLAYER_SPRITE, game.player.x, game.player.y, COL);
 
-      // Particles
+      // Particles (white catch/collision bursts)
       for (const pt of game.particles) {
         pt.draw();
       }
@@ -745,6 +1209,7 @@
       draw();
 
       if (game && game.gameOver) {
+        switchMusic(noiseBuffer);
         showStep('stepStats');
         statsCaught.textContent = `STARS: ${game.caught}`;
         overlay.classList.remove('hidden');
@@ -864,7 +1329,8 @@
     // Start game
     function startGame() {
       if (audioCtx.state === 'suspended') audioCtx.resume();
-      startMusic();
+      if (musicStarted) switchMusic(musicBuffer);
+      else startMusic();
       // Reset catch combo and reverb mix
       lastCatchTime = 0;
       catchCombo = 0;
