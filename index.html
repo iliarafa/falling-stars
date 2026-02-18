@@ -385,12 +385,17 @@
       .then(buf => audioCtx.decodeAudioData(buf))
       .then(decoded => { spaceBuffer = decoded; });
 
-    // Subtle white noise buffer for overlay screens (2 seconds, looped)
-    const noiseLength = audioCtx.sampleRate * 2;
+    // Soft ambient noise buffer for overlay screens (4 seconds, looped)
+    const noiseLength = audioCtx.sampleRate * 4;
     const noiseBuffer = audioCtx.createBuffer(1, noiseLength, audioCtx.sampleRate);
     const noiseData = noiseBuffer.getChannelData(0);
+    // Generate raw noise then smooth it for a warm, soft character
     for (let i = 0; i < noiseLength; i++) {
-      noiseData[i] = (Math.random() * 2 - 1) * 0.06;
+      noiseData[i] = (Math.random() * 2 - 1) * 0.015;
+    }
+    // One-pole low-pass filter (smoothing factor ~0.95 removes most high frequencies)
+    for (let i = 1; i < noiseLength; i++) {
+      noiseData[i] = noiseData[i - 1] * 0.95 + noiseData[i] * 0.05;
     }
 
     function switchMusic(buffer) {
